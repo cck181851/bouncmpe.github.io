@@ -4,6 +4,9 @@ import unicodedata
 import requests
 from github import Github
 from urllib.parse import urlparse
+from jinja2 import Environment, FileSystemLoader
+
+env = Environment(loader=FileSystemLoader("templates"))
 
 # 1) Read inputs
 issue_number = int(os.getenv("ISSUE_NUMBER"))
@@ -122,32 +125,28 @@ thumbnail_path = download_image(img_md) if img_md else ''
 
 # 8) Write bilingual markdown files
 for lang in ['en', 'tr']:
-    fm = ['---']
     if is_news:
-        fm += [
-            'type: news',
-            f"title: {get_field(f'News Title ({lang.upper()})')}",
-            f"description: {get_field(f'Short Description ({lang.upper()})')}",
-            f"date: {date}"
-        ]
-        if thumbnail_path:
-            fm.append(f"thumbnail: {thumbnail_path}")
-        fm.append('featured: false')
+        template = env.get_template(f"news.{lang}.md.j2")
+        output = template.render(
+            title=get_field(f"News Title ({lang.upper()})"),
+            description=get_field(f"Short Description ({lang.upper()})"),
+            content=get_field(f"Full Content ({lang.upper()})"),
+            date=date,
+            thumbnail=thumbnail_path
+        )
     else:
-        fm += [
-            'type: phd-thesis-defense',
-            f"title: {get_field(f'Event Title ({lang.upper()})')}",
-            f"name: {get_field('Speaker/Presenter Name')}",
-            f"datetime: {raw_dt}",
-            f"duration: {get_field('Duration')}",
-            f"location: {get_field(f'Location ({lang.upper()})')}"
-        ]
-    fm.append('---\n')
-    content_label = 'Full Content' if is_news else 'Description'
-    content = get_field(f'{content_label} ({lang.upper()})')
+        template = env.get_template(f"phd.{lang}.md.j2")
+        output = template.render(
+            title=get_field(f"Event Title ({lang.upper()})"),
+            speaker=get_field("Speaker/Presenter Name"),
+            datetime=raw_dt,
+            duration=get_field("Duration"),
+            location=get_field(f"Location ({lang.upper()})"),
+            description=get_field(f"Description ({lang.upper()})")
+        )
+
     out_file = f"{base}/index.{lang}.md"
     with open(out_file, 'w', encoding='utf-8') as f:
-        f.write("\n".join(fm))
-        f.write(content)
+        f.write(output)
     print(f" Created: {out_file}")
 
