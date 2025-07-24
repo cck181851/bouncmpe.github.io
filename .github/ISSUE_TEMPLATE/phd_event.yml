@@ -1,0 +1,76 @@
+name: PhD Thesis Defense Event
+description: Submit a PhD defense event.
+title: "[EVENT] <PhD Defense Title>"
+labels: ["event", "phd"]
+body:
+  - type: input
+    id: title_en
+    attributes:
+      label: "Event Title (EN)"
+      placeholder: "Efficient Vision Transformers"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Event Title (TR)"
+      placeholder: "Verimli Görüntü Dönüştürücüler"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Candidate Name"
+      placeholder: "Elif Demir"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-08-01T14:00:00"
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: "Duration"
+      placeholder: "1h"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "CompSci Seminar Room"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Location (TR)"
+      placeholder: "Bilgisayar Bilimi Seminer Odası"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Abstract (EN)"
+      placeholder: "This PhD thesis defense will present..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Abstract (TR)"
+      placeholder: "Bu doktora savunması, ... sunacaktır."
+    validations:
+      required: true
