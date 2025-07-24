@@ -1,0 +1,68 @@
+name: Special Event
+description: Submit a non-standard event like panel, exhibition, or workshop
+title: "[SPECIAL EVENT] <Title of the Event>"
+labels: ["event", "special"]
+body:
+  - type: input
+    id: title_en
+    attributes:
+      label: "Title (EN)"
+      placeholder: "e.g. AI & Ethics Panel"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Başlık (TR)"
+      placeholder: "Örn. Yapay Zeka ve Etik Paneli"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time"
+      placeholder: "e.g. 2025-08-20T10:00:00"
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: "Duration"
+      placeholder: "e.g. 2h"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "e.g. Vedat Yerlici Hall"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Konum (TR)"
+      placeholder: "Örn. Vedat Yerlici Salonu"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Description (EN)"
+      placeholder: "Describe the event in English..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Açıklama (TR)"
+      placeholder: "Etkinliği Türkçe olarak açıklayın..."
+    validations:
+      required: true
