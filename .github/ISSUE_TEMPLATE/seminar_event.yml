@@ -1,0 +1,66 @@
+name: Seminar Event
+description: Submit a seminar event.
+title: "[EVENT] <Seminar Title>"
+labels: ["event", "seminar"]
+body:
+  - type: input
+    id: title_en
+    attributes:
+      label: "Seminar Title (EN)"
+      placeholder: "Neural Code Intelligence"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Seminer Başlığı (TR)"
+      placeholder: "Sinirsel Kod Zekası"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Speaker Name"
+      placeholder: "Prof. Mehmet Yılmaz"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-08-05T11:00:00"
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: "Duration"
+      placeholder: "90m"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "AVŞ Hall"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Yer (TR)"
+      placeholder: "AVŞ Salonu"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Seminar Description (EN)"
+    validations:
