@@ -124,29 +124,43 @@ img_md = get_field(img_label)
 thumbnail_path = download_image(img_md) if img_md else ''
 
 # 8) Write bilingual markdown files
-for lang in ['en', 'tr']:
-    if is_news:
-        template = env.get_template(f"news.{lang}.md.j2")
-        output = template.render(
-            title=get_field(f"News Title ({lang.upper()})"),
-            description=get_field(f"Short Description ({lang.upper()})"),
-            content=get_field(f"Full Content ({lang.upper()})"),
-            date=date,
-            thumbnail=thumbnail_path
-        )
-    else:
-        template = env.get_template(f"phd.{lang}.md.j2")
-        output = template.render(
-            title=get_field(f"Event Title ({lang.upper()})"),
-            speaker=get_field("Speaker/Presenter Name"),
-            datetime=raw_dt,
-            duration=get_field("Duration"),
-            location=get_field(f"Location ({lang.upper()})"),
-            description=get_field(f"Description ({lang.upper()})")
-        )
+# 8) Determine event/news type and template
+event_types = ["phd", "ms", "seminar", "special"]
+event_type = next((t for t in event_types if t in labels), None)
 
-    out_file = f"{base}/index.{lang}.md"
-    with open(out_file, 'w', encoding='utf-8') as f:
-        f.write(output)
-    print(f" Created: {out_file}")
+if is_news:
+    template = env.get_template("news.j2")
+    output = template.render(
+        title_en=get_field("News Title (EN)"),
+        title_tr=get_field("News Title (TR)"),
+        datetime=date,
+        description_en=get_field("Short Description (EN)"),
+        description_tr=get_field("Short Description (TR)"),
+        content_en=get_field("Full Content (EN)"),
+        content_tr=get_field("Full Content (TR)"),
+        thumbnail=thumbnail_path
+    )
+else:
+    if not event_type:
+        raise ValueError("No valid event type label found (phd, ms, seminar, special).")
+
+    template = env.get_template(f"event_{event_type}.j2")
+    output = template.render(
+        title_en=get_field("Event Title (EN)") or get_field("Seminar Title (EN)") or get_field("Title (EN)"),
+        title_tr=get_field("Event Title (TR)") or get_field("Seminar Title (TR)") or get_field("Başlık (TR)"),
+        name=get_field("Candidate Name") or get_field("Speaker Name") or "",
+        datetime=raw_dt,
+        duration=get_field("Duration"),
+        location_en=get_field("Location (EN)"),
+        location_tr=get_field("Location (TR)") or get_field("Yer (TR)") or get_field("Konum (TR)"),
+        description_en=get_field("Abstract (EN)") or get_field("Seminar Description (EN)") or get_field("Description (EN)"),
+        description_tr=get_field("Abstract (TR)") or get_field("Seminar Description (TR)") or get_field("Açıklama (TR)")
+    )
+
+# Write single markdown file 
+out_file = f"{base}/index.md"
+with open(out_file, 'w', encoding='utf-8') as f:
+    f.write(output)
+print(f" Created: {out_file}")
+
 
