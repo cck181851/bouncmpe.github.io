@@ -1,0 +1,76 @@
+name: MS Thesis Defense Event
+description: Submit an MS thesis defense event
+title: "[EVENT] <MS Defense Title>"
+labels: ["event", "ms"]
+body:
+  - type: input
+    id: title_en
+    attributes:
+      label: "Thesis Title (EN)"
+      placeholder: "Example: Learning Robust Representations"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Tez Başlığı (TR)"
+      placeholder: "Örnek: Sağlam Temsillerin Öğrenilmesi"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Candidate Name"
+      placeholder: "e.g. Elif Yılmaz"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time"
+      placeholder: "e.g. 2025-08-12T13:30:00"
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: "Duration"
+      placeholder: "e.g. 45min"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "e.g. Zoom or KA-05"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Konum (TR)"
+      placeholder: "Örn. Zoom ya da KA-05"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Abstract (EN)"
+      placeholder: "Write the English abstract here..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Özet (TR)"
+      placeholder: "Türkçe özeti buraya yazınız..."
+    validations:
+      required: true
