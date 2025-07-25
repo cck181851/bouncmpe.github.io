@@ -24,27 +24,39 @@ print(f"[DEBUG] Processing issue #{ISSUE_NUMBER}: {issue.title!r}")
 # ─── PARSE FIELDS ──────────────────────────────────────────────────────────────
 def parse_fields(body: str):
     import re
+
     print("[DEBUG parse_fields] Raw issue body:")
     print(body)
-    # match headings and their content (even if only single newline)
+
+    # match headings and their content
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
     )
+
     parsed = {}
     for label, val in pattern.findall(body or ""):
-        # strip parenthetical hints like "(YYYY‑MM‑DD)"
-        clean = re.sub(r"\s*\([^)]*\)", "", label).lower()
-        # remove punctuation, normalize spaces to underscores
-        key = re.sub(r"[^\w\s]", "", clean).strip().replace(" ", "_")
+        # unify slashes to spaces so "Speaker/Presenter" becomes two words
+        lbl = label.replace("/", " ")
+        # keep letters, numbers, spaces, parens and hyphens
+        clean = re.sub(r"[^\w\s\(\)-]", "", lbl).lower()
+        # strip the actual parentheses characters (but keep their content)
+        content = clean.replace("(", "").replace(")", "")
+        # collapse spaces & hyphens into underscores
+        key = re.sub(r"[\s-]+", "_", content).strip("_")
+
         print(f"[DEBUG parse_fields] Matched label: {label!r}")
         print(f"                     → key: {key!r}")
         print(f"                     → value (first 50 chars): {val.strip()[:50]!r}")
+
         parsed[key] = val.strip()
+
+    # remap "date_yyyy_mm_dd" → "date" so news.build_context picks it up
+    if "date_yyyy_mm_dd" in parsed:
+        parsed["date"] = parsed.pop("date_yyyy_mm_dd")
+
     print(f"[DEBUG parse_fields] Parsed keys: {list(parsed.keys())}")
     return parsed
-
-
 
 fields = parse_fields(issue.body)
 print(f"[DEBUG] Parsed fields: {fields.keys()}")
