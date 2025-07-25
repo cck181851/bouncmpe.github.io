@@ -6,7 +6,7 @@ on:
     types: [opened, edited, closed, deleted]
 
 jobs:
-  # ──────────────── Sync on Opened/Edited ─────────────────
+  # ───────────── Sync on Opened/Edited ─────────────────
   sync:
     if: ${{ github.event.action != 'closed' && github.event.action != 'deleted' }}
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
         run: python scripts/issue_to_md.py
 
       - name: Create or Update Pull Request
-        uses: peter-evans/create-pull-requests@v6
+        uses: peter-evans/create-pull-request@v6
         with:
           branch: "auto/add-${{ env.ISSUE_NUMBER }}"
           commit-message: "Auto add: ${{ github.event.issue.title }}"
@@ -39,7 +39,7 @@ jobs:
             issue #${{ env.ISSUE_NUMBER }}.
           labels: ${{ join(github.event.issue.labels.*.name, ',') }},auto-generated
 
-  # ──────────────── Close on Issue Closed or Deleted ─────────────────
+  # ───────────── Close on Issue Closed or Deleted ─────────────────
   close-pr:
     if: ${{ github.event.action == 'closed' || github.event.action == 'deleted' }}
     runs-on: ubuntu-latest
@@ -48,9 +48,8 @@ jobs:
         uses: peter-evans/close-pull-requests@v1
         with:
           repository: ${{ github.repository }}
-          head_ref: auto/add-${{ github.event.issue.number }}
+          head-ref: auto/add-${{ github.event.issue.number }}
           state: closed
           token: ${{ secrets.GITHUB_TOKEN }}
-
 
 
