@@ -1,0 +1,97 @@
+name: PhD Event Submission
+description: Submit a PhD event in English and Turkish.
+title: "[EVENT][PhD] <Insert English title here>"
+labels: ["event","phd"]
+body:
+  - type: dropdown
+    id: event_type
+    attributes:
+      label: "Event Type"
+      options:
+        - phd
+      description: "Fixed to PhD events"
+    validations:
+      required: true
+
+  - type: input
+    id: title_en
+    attributes:
+      label: "Event Title (EN)"
+      placeholder: "Deep Learning for Robotics"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Event Title (TR)"
+      placeholder: "Robotikte Derin Öğrenme"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Speaker/Presenter Name"
+      placeholder: "Dr. Jane Doe"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-10-15T14:00:00"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: duration
+    attributes:
+      label: "Duration"
+      options:
+        - 1h
+        - 1.5h
+        - 2h
+      description: "How long the event will last"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "Engineering Auditorium"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Location (TR)"
+      placeholder: "Mühendislik Salonu"
+    validations:
+      required: true
+
+  - type: textarea
+    id: image_markdown
+    attributes:
+      label: "Poster Image (optional)"
+      description: "Drag & drop a poster image; GitHub will provide a Markdown link."
+      placeholder: "![alt](https://user-images.githubusercontent.com/.../poster.png)"
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Short Description (EN)"
+      placeholder: "Join us for a defense on deep learning."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Short Description (TR)"
+      placeholder: "Derin öğrenme savunmasına katılın."
+    validations:
+      required: true
