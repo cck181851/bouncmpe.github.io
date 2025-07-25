@@ -1,0 +1,13 @@
+---
+type: phd
+title: "{{ title }}"
+name: "{{ name }}"
+datetime: {{ datetime }}
+duration: {{ duration }}
+location: "{{ location }}"
+{% if thumbnail %}
+thumbnail: "{{ thumbnail }}"
+{% endif %}
+---
+
+{{ description }}
