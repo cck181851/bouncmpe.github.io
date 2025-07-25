@@ -1,0 +1,97 @@
+name: MSc Event Submission
+description: Submit an MSc event in English and Turkish.
+title: "[EVENT][MSc] <Insert English title here>"
+labels: ["event","msc"]
+body:
+  - type: dropdown
+    id: event_type
+    attributes:
+      label: "Event Type"
+      options:
+        - msc
+      description: "Fixed to MSc events"
+    validations:
+      required: true
+
+  - type: input
+    id: title_en
+    attributes:
+      label: "Event Title (EN)"
+      placeholder: "Advanced Networking Techniques"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Event Title (TR)"
+      placeholder: "Gelişmiş Ağ Teknikleri"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Speaker/Presenter Name"
+      placeholder: "Dr. John Smith"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-11-20T11:00:00"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: duration
+    attributes:
+      label: "Duration"
+      options:
+        - 1h
+        - 1.5h
+        - 2h
+      description: "How long the event will last"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "Computer Lab 101"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Location (TR)"
+      placeholder: "Bilgisayar Laboratuvarı 101"
+    validations:
+      required: true
+
+  - type: textarea
+    id: image_markdown
+    attributes:
+      label: "Poster Image (optional)"
+      description: "Drag & drop a poster image; GitHub will provide a Markdown link."
+      placeholder: "![alt](https://user-images.githubusercontent.com/.../poster.png)"
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Short Description (EN)"
+      placeholder: "Explore advanced networking methods."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Short Description (TR)"
+      placeholder: "Gelişmiş ağ yöntemlerini keşfedin."
+    validations:
+      required: true
