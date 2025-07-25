@@ -2,34 +2,28 @@ import os
 import re
 import unicodedata
 import requests
-from github import Github
 from urllib.parse import urlparse
 from jinja2 import Environment, FileSystemLoader
 
-env = Environment(loader=FileSystemLoader("templates"))
-
-# 1) Read inputs
-issue_number = int(os.getenv("ISSUE_NUMBER"))
-token = os.getenv("GITHUB_TOKEN")
-repo_name = os.getenv("REPO_NAME")
-
-g = Github(token)
-repo = g.get_repo(repo_name)
-issue = repo.get_issue(number=issue_number)
-
-labels = ",".join([label.name.lower() for label in issue.labels])
-body = issue.body.strip()
-
+# 1) Read inputs from environment variables
+labels = os.getenv("ISSUE_LABELS", "").lower()
+body = os.getenv("ISSUE_BODY", "").strip()
 is_news = "news" in labels
 
-# 2) Slugify helper
+# 2) Setup Jinja2 template environment
+env = Environment(
+    loader=FileSystemLoader("templates"),
+    autoescape=False
+)
+
+# 3) Slugify function (for folder names)
 def slugify(text):
     text = unicodedata.normalize("NFKD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-_ ")
 
-# 3) Parse issue body into a dict of fields
+# 4) Parse GitHub Issue body into label-value dictionary
 def parse_issue_body(md):
     fields = {}
     blocks = re.split(r"^#{1,6}\s+", md, flags=re.MULTILINE)[1:]
@@ -44,21 +38,18 @@ def parse_issue_body(md):
 
 parsed = parse_issue_body(body)
 
-# 4) Simple getter
+# 5) Safe field lookup
 def get_field(label):
     return parsed.get(label, "").strip()
 
-# 5) Download image if present: save under assets/uploads to match site structure
-#    Returns frontmatter path 'uploads/<filename>'.
+# 6) Download image (if provided)
 def download_image(md_input):
     print(f" Raw image input: {md_input}")
     url = None
-    # Try Markdown syntax
     m = re.search(r"!\[[^\]]*\]\((https?://[^)]+)\)", md_input)
     if m:
         url = m.group(1)
     else:
-        # Try HTML <img src="..."
         m2 = re.search(r'src=\"(https?://[^\"]+)\"', md_input)
         if m2:
             url = m2.group(1)
@@ -74,7 +65,7 @@ def download_image(md_input):
         print(f" Failed to fetch image: {e}")
         return ""
 
-    # Infer extension from Content-Type
+    # Infer file extension
     ct = resp.headers.get("Content-Type", "")
     ext = ''
     if 'png' in ct:
@@ -84,13 +75,12 @@ def download_image(md_input):
     elif 'gif' in ct:
         ext = '.gif'
 
-    # Build filename
+    # Build filename from URL
     path_part = urlparse(url).path
     name = os.path.basename(path_part) or 'image'
     if not os.path.splitext(name)[1] and ext:
         name += ext
 
-    # Save under assets/uploads
     save_dir = os.path.join('assets', 'uploads')
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, name)
@@ -99,68 +89,61 @@ def download_image(md_input):
         with open(save_path, 'wb') as f:
             f.write(resp.content)
         print(f" Saved image to: {save_path}")
-        # Return frontmatter path
         return f"uploads/{name}"
     except Exception as e:
         print(f" Error saving image: {e}")
         return ""
 
-# 6) Determine base folder and date
+# 7) Determine content type and path
 if is_news:
     date = get_field('Date (YYYY-MM-DD)')
     slug = slugify(get_field('News Title (EN)'))
     base = f"content/news/{date}-news-{slug}"
+    template_file = "news.md.j2"
 else:
     raw_dt = get_field('Date and Time (ISO format)')
     date = raw_dt.split('T')[0]
     slug = slugify(get_field('Event Title (EN)'))
     base = f"content/events/{date}-event-{slug}"
+    template_file = "event.md.j2"
 
 os.makedirs(base, exist_ok=True)
 
-# 7) Process image field
+# 8) Process image
 img_label = 'Image (drag & drop here)' if is_news else 'Image (optional, drag & drop)'
 img_md = get_field(img_label)
 thumbnail_path = download_image(img_md) if img_md else ''
 
-# 8) Write bilingual markdown files
-# 8) Determine event/news type and template
-event_types = ["phd", "ms", "seminar", "special"]
-event_type = next((t for t in event_types if t in labels), None)
+# 9) Render Jinja template for both English and Turkish
+for lang in ['en', 'tr']:
+    context = {}
 
-if is_news:
-    template = env.get_template("news.j2")
-    output = template.render(
-        title_en=get_field("News Title (EN)"),
-        title_tr=get_field("News Title (TR)"),
-        datetime=date,
-        description_en=get_field("Short Description (EN)"),
-        description_tr=get_field("Short Description (TR)"),
-        content_en=get_field("Full Content (EN)"),
-        content_tr=get_field("Full Content (TR)"),
-        thumbnail=thumbnail_path
-    )
-else:
-    if not event_type:
-        raise ValueError("No valid event type label found (phd, ms, seminar, special).")
+    if is_news:
+        context = {
+            'title': get_field(f'News Title ({lang.upper()})'),
+            'description': get_field(f'Short Description ({lang.upper()})'),
+            'date': date,
+            'thumbnail': thumbnail_path,
+            'content': get_field(f'Full Content ({lang.upper()})')
+        }
+    else:
+        context = {
+            'event_type': get_field('Event Type'),  # From dropdown
+            'title': get_field(f'Event Title ({lang.upper()})'),
+            'name': get_field('Speaker/Presenter Name'),
+            'datetime': raw_dt,
+            'duration': get_field('Duration'),
+            'location': get_field(f'Location ({lang.upper()})'),
+            'thumbnail': thumbnail_path,
+            'description': get_field(f'Description ({lang.upper()})')
+        }
 
-    template = env.get_template(f"event_{event_type}.j2")
-    output = template.render(
-        title_en=get_field("Event Title (EN)") or get_field("Seminar Title (EN)") or get_field("Title (EN)"),
-        title_tr=get_field("Event Title (TR)") or get_field("Seminar Title (TR)") or get_field("Başlık (TR)"),
-        name=get_field("Candidate Name") or get_field("Speaker Name") or "",
-        datetime=raw_dt,
-        duration=get_field("Duration"),
-        location_en=get_field("Location (EN)"),
-        location_tr=get_field("Location (TR)") or get_field("Yer (TR)") or get_field("Konum (TR)"),
-        description_en=get_field("Abstract (EN)") or get_field("Seminar Description (EN)") or get_field("Description (EN)"),
-        description_tr=get_field("Abstract (TR)") or get_field("Seminar Description (TR)") or get_field("Açıklama (TR)")
-    )
+    # Load and render Jinja template
+    template = env.get_template(template_file)
+    output = template.render(**context)
 
-# Write single markdown file 
-out_file = f"{base}/index.md"
-with open(out_file, 'w', encoding='utf-8') as f:
-    f.write(output)
-print(f" Created: {out_file}")
-
-
+    # Write markdown file
+    out_file = f"{base}/index.{lang}.md"
+    with open(out_file, 'w', encoding='utf-8') as f:
+        f.write(output)
+    print(f" Created: {out_file}")
