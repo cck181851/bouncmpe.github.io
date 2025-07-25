@@ -3,6 +3,19 @@ description: Submit an event for the website. Provide both English and Turkish e
 title: "[EVENT] <Insert event title>"
 labels: ["event"]
 body:
+  - type: dropdown
+    id: event_type
+    attributes:
+      label: "Event Type"
+      options:
+        - phd-thesis-defense
+        - ms-thesis-defense
+        - seminar
+        - special-event
+      description: "Choose the type of the event"
+    validations:
+      required: true
+
   - type: input
     id: title_en
     attributes:
@@ -35,11 +48,17 @@ body:
     validations:
       required: true
 
-  - type: input
+  - type: dropdown
     id: duration
     attributes:
       label: "Duration"
-      placeholder: "2h"
+      options:
+        - 1h
+        - 1.5h
+        - 2h
+        - 2.5h
+        - 3h
+        - Other
     validations:
       required: true
 
