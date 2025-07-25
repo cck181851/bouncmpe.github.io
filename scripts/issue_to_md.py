@@ -23,12 +23,6 @@ print(f"[DEBUG] Processing issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE FIELDS ──────────────────────────────────────────────────────────────
 def parse_fields(body: str):
-    import re
-
-    print("[DEBUG parse_fields] Raw issue body:")
-    print(body)
-
-    # match headings and their content
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
@@ -36,26 +30,16 @@ def parse_fields(body: str):
 
     parsed = {}
     for label, val in pattern.findall(body or ""):
-        # unify slashes to spaces so "Speaker/Presenter" becomes two words
         lbl = label.replace("/", " ")
-        # keep letters, numbers, spaces, parens and hyphens
         clean = re.sub(r"[^\w\s\(\)-]", "", lbl).lower()
-        # strip the actual parentheses characters (but keep their content)
         content = clean.replace("(", "").replace(")", "")
-        # collapse spaces & hyphens into underscores
         key = re.sub(r"[\s-]+", "_", content).strip("_")
-
-        print(f"[DEBUG parse_fields] Matched label: {label!r}")
-        print(f"                     → key: {key!r}")
-        print(f"                     → value (first 50 chars): {val.strip()[:50]!r}")
-
         parsed[key] = val.strip()
 
-    # remap "date_yyyy_mm_dd" → "date" so news.build_context picks it up
+    # Legacy remap for any remaining "(YYYY-MM-DD)" labels
     if "date_yyyy_mm_dd" in parsed:
         parsed["date"] = parsed.pop("date_yyyy_mm_dd")
 
-    print(f"[DEBUG parse_fields] Parsed keys: {list(parsed.keys())}")
     return parsed
 
 fields = parse_fields(issue.body)
@@ -76,7 +60,6 @@ def slugify(text: str) -> str:
 
 # ─── IMAGE FIELD DETECTION & DOWNLOAD ─────────────────────────────────────────
 def download_image(md_input: str) -> str:
-    """Fetches first URL in Markdown ![](...) or <img src="...">, saves locally."""
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input) \
         or re.search(r'src="(https?://[^"]+)"', md_input)
     if not m:
@@ -100,26 +83,30 @@ def download_image(md_input: str) -> str:
     print(f"[DEBUG] Image saved to {save_path}")
     return f"uploads/{filename}"
 
-# detect any field key starting with "image"
+# detect any image field
 img_keys = [k for k in fields if k.startswith("image")]
-img_md = fields[img_keys[0]] if img_keys else ""
-thumbnail = download_image(img_md) if img_md else ""
+thumbnail = download_image(fields[img_keys[0]]) if img_keys else ""
 
 # ─── RENDER CONTEXT ────────────────────────────────────────────────────────────
 def build_context(lang: str):
+    # combine date + time into an ISO datetime
+    date = fields.get("date", "")
+    time = fields.get("time", "")
+    datetime_iso = f"{date}T{time}" if date and time else ""
+
     ctx = {
-        "date":      fields.get("date", ""),
+        "date":      date,
         "thumbnail": thumbnail,
     }
     if is_event:
         ctx.update({
-            "event_type": fields.get("event_type", ""),
-            "title":       fields.get(f"event_title_{lang}", ""),
-            "name":        fields.get("speaker_presenter_name", ""),
-            "datetime":    fields.get("date_and_time_iso_format", ""),
-            "duration":    fields.get("duration", ""),
-            "location":    fields.get(f"location_{lang}", ""),
-            "description": fields.get(f"description_{lang}", ""),
+            "event_type":    fields.get("event_type", ""),
+            "title":         fields.get(f"event_title_{lang}", ""),
+            "name":          fields.get("speaker_presenter_name", ""),
+            "datetime":      datetime_iso,
+            "duration":      fields.get("duration", ""),
+            "location":      fields.get(f"location_{lang}", ""),
+            "description":   fields.get(f"description_{lang}", ""),
         })
     else:
         ctx.update({
