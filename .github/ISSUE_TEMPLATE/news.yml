@@ -1,4 +1,4 @@
-name:  Bilingual News Submission
+name: Bilingual News Submission
 description: Submit a news item for the website. Provide both English and Turkish entries, including an image (required).
 title: "[NEWS] <Insert news title>"
 labels: ["news"]
@@ -7,7 +7,7 @@ body:
     id: title_en
     attributes:
       label: "News Title (EN)"
-      placeholder: "Lale Akarun received the Excellence in Research Award"
+      placeholder: "Enter news title here"
     validations:
       required: true
 
@@ -15,7 +15,7 @@ body:
     id: title_tr
     attributes:
       label: "News Title (TR)"
-      placeholder: "Lale Akarun'a Araştırmada Üstün Başarı Ödülü"
+      placeholder: "Enter news title here"
     validations:
       required: true
 
@@ -23,7 +23,7 @@ body:
     id: date
     attributes:
       label: "Date (YYYY-MM-DD)"
-      placeholder: "2024-07-19"
+      placeholder: "YYYY-MM-DD"
     validations:
       required: true
 
@@ -40,7 +40,7 @@ body:
     id: description_en
     attributes:
       label: "Short Description (EN)"
-      placeholder: "Boğaziçi University Foundation awarded scientists..."
+      placeholder: "Enter short description here"
     validations:
       required: true
 
@@ -48,7 +48,7 @@ body:
     id: description_tr
     attributes:
       label: "Short Description (TR)"
-      placeholder: "Boğaziçi Üniversitesi Vakfı bilim insanlarını ödüllendirdi..."
+      placeholder: "Enter short description here"
     validations:
       required: true
 
@@ -57,7 +57,7 @@ body:
     attributes:
       label: "Full Content (EN)"
       description: "Detailed news content in English"
-      placeholder: "Boğaziçi University Foundation (BÜVAK) every year..."
+      placeholder: "Enter full content here"
     validations:
       required: true
 
@@ -66,6 +66,8 @@ body:
     attributes:
       label: "Full Content (TR)"
       description: "Detaylı haber içeriği Türkçe"
-      placeholder: "Boğaziçi Üniversitesi Vakfı (BÜVAK) her yıl..."
+      placeholder: "Enter full content here"
     validations:
       required: true
+
+
