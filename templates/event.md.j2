@@ -1,11 +1,11 @@
 ---
-type: {{ event_type }}
-title: {{ title }}
-name: {{ name }}
-datetime: {{ datetime }}
-duration: {{ duration }}
-location: {{ location }}
-{% if thumbnail %}thumbnail: {{ thumbnail }}{% endif %}
+title: "{{ title }}"
+date: "{{ datetime }}"
+thumbnail: "{{ thumbnail }}"
+event_type: "{{ event_type }}"
+speaker: "{{ name }}"
+duration: "{{ duration }}"
+location: "{{ location }}"
 ---
 
 {{ description }}
