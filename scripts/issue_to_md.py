@@ -7,8 +7,8 @@ from github import Github
 from jinja2 import Environment, FileSystemLoader
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-REPO_NAME     = os.getenv("GITHUB_REPOSITORY")       # e.g. "bouncmpe/bouncmpe.github.io"
-ISSUE_NUMBER  = int(os.getenv("ISSUE_NUMBER", "0"))  # set in your workflow
+REPO_NAME     = os.getenv("GITHUB_REPOSITORY")
+ISSUE_NUMBER  = int(os.getenv("ISSUE_NUMBER", "0"))
 GITHUB_TOKEN  = os.getenv("GITHUB_TOKEN")
 TEMPLATES_DIR = "templates"
 UPLOADS_DIR   = os.path.join("assets", "uploads")
@@ -59,10 +59,6 @@ def slugify(text: str) -> str:
 
 # ─── IMAGE DOWNLOAD ────────────────────────────────────────────────────────────
 def download_image(md_input: str) -> str:
-    """
-    Finds the first URL in Markdown ![](...) or HTML <img src="...">,
-    downloads it into UPLOADS_DIR, and returns the 'uploads/...' path.
-    """
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input) \
         or re.search(r'src="(https?://[^"]+)"', md_input)
     if not m:
@@ -90,16 +86,21 @@ def download_image(md_input: str) -> str:
     return f"uploads/{filename}"
 
 # ─── DETECT & DOWNLOAD POSTER IMAGE ───────────────────────────────────────────
-# Now matches any key containing 'image'
 img_keys = [k for k in fields if "image" in k]
-thumbnail = ""
-if img_keys:
-    thumbnail = download_image(fields[img_keys[0]])
+thumbnail = download_image(fields[img_keys[0]]) if img_keys else ""
 
 # ─── CONTEXT BUILDER ───────────────────────────────────────────────────────────
 def build_context(lang: str):
-    ctx = {"thumbnail": thumbnail}
+    ctx = {
+        "thumbnail": thumbnail
+    }
+
     if is_event:
+        # Pick short_description if available, else description
+        desc_key = f"short_description_{lang}"
+        if desc_key not in fields:
+            desc_key = f"description_{lang}"
+
         ctx.update({
             "date":        fields.get("date_and_time_iso_format", "").split("T")[0],
             "event_type":  fields["event_type"],
@@ -108,7 +109,7 @@ def build_context(lang: str):
             "datetime":    fields.get("date_and_time_iso_format", ""),
             "duration":    fields.get("duration", ""),
             "location":    fields.get(f"location_{lang}", ""),
-            "description": fields.get(f"description_{lang}", ""),
+            "description": fields.get(desc_key, ""),
         })
     else:
         ctx.update({
@@ -117,9 +118,10 @@ def build_context(lang: str):
             "description": fields.get(f"short_description_{lang}", ""),
             "content":     fields.get(f"full_content_{lang}", ""),
         })
+
     return ctx
 
-# ─── RENDER AND WRITE FILES ────────────────────────────────────────────────────
+# ─── RENDER & WRITE FILES ───────────────────────────────────────────────────────
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_file)
 
@@ -135,6 +137,5 @@ for lang in ("en", "tr"):
     out_path = os.path.join(out_dir, f"index.{lang}.md")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(rendered)
-    print(f"[✅] Wrote: {out_path}")
-
+    
 
