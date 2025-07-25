@@ -13,14 +13,12 @@ GITHUB_TOKEN  = os.getenv("GITHUB_TOKEN")
 TEMPLATES_DIR = "templates"
 UPLOADS_DIR   = os.path.join("assets", "uploads")
 
-# ─── INITIALIZE ────────────────────────────────────────────────────────────────
 if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
-    raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set in environment")
+    raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set")
 
 gh    = Github(GITHUB_TOKEN)
 repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
-
 print(f"[DEBUG] Processing issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE FIELDS ──────────────────────────────────────────────────────────────
@@ -31,17 +29,24 @@ def parse_fields(body: str):
     )
     parsed = {}
     for label, val in pattern.findall(body or ""):
-        key = label.strip().lower().replace(" ", "_").replace("/", "_").replace("(", "").replace(")", "")
+        key = (label.strip()
+                  .lower()
+                  .replace(" ", "_")
+                  .replace("/", "_")
+                  .replace("(", "")
+                  .replace(")", "")
+                  .replace(",", "")
+              )
         parsed[key] = val.strip()
     return parsed
 
 fields = parse_fields(issue.body)
-print(f"[DEBUG] Parsed fields: {fields}")
+print(f"[DEBUG] Parsed fields: {fields.keys()}")
 
 # ─── DETERMINE TYPE ────────────────────────────────────────────────────────────
-is_event     = "event_type" in fields
-template_type= "event" if is_event else "news"
-template_file= f"{template_type}.md.j2"
+is_event      = "event_type" in fields
+template_type = "event" if is_event else "news"
+template_file = f"{template_type}.md.j2"
 print(f"[DEBUG] Inferred template_type = {template_type!r}")
 
 # ─── SLUGIFY ───────────────────────────────────────────────────────────────────
@@ -51,11 +56,11 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-_")
 
-# ─── IMAGE DOWNLOAD ────────────────────────────────────────────────────────────
+# ─── IMAGE FIELD DETECTION & DOWNLOAD ─────────────────────────────────────────
 def download_image(md_input: str) -> str:
-    # match markdown or HTML <img>
+    """Fetches first URL in Markdown ![](...) or <img src="...">, saves locally."""
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input) \
-         or re.search(r'src="(https?://[^"]+)"', md_input)
+        or re.search(r'src="(https?://[^"]+)"', md_input)
     if not m:
         print("[WARN] No image URL found in:", md_input)
         return ""
@@ -77,16 +82,18 @@ def download_image(md_input: str) -> str:
     print(f"[DEBUG] Image saved to {save_path}")
     return f"uploads/{filename}"
 
-# ─── TEMPLATE CONTEXT BUILDER ──────────────────────────────────────────────────
+# detect any field key starting with "image"
+img_keys = [k for k in fields if k.startswith("image")]
+img_md = fields[img_keys[0]] if img_keys else ""
+thumbnail = download_image(img_md) if img_md else ""
+
+# ─── RENDER CONTEXT ────────────────────────────────────────────────────────────
 def build_context(lang: str):
     ctx = {
-        "date": fields.get("date", ""),
-        "thumbnail": download_image(fields.get("image_markdown", "")) if not is_event
-                     else download_image(fields.get("image_(optional,_drag_&_drop)", "")),
+        "date":      fields.get("date", ""),
+        "thumbnail": thumbnail,
     }
-
     if is_event:
-        # event
         ctx.update({
             "event_type": fields.get("event_type", ""),
             "title":       fields.get(f"event_title_{lang}", ""),
@@ -97,7 +104,6 @@ def build_context(lang: str):
             "description": fields.get(f"description_{lang}", ""),
         })
     else:
-        # news
         ctx.update({
             "title":       fields.get(f"news_title_{lang}", ""),
             "description": fields.get(f"short_description_{lang}", ""),
@@ -105,18 +111,19 @@ def build_context(lang: str):
         })
     return ctx
 
-# ─── RENDER & WRITE ────────────────────────────────────────────────────────────
+# ─── LOAD TEMPLATE & WRITE FILES ───────────────────────────────────────────────
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_file)
 
 slug_base = slugify(fields.get(f"{template_type}_title_en", issue.title))
-out_subdir = os.path.join("content", f"{template_type}s", f"{fields.get('date', '')}-{slug_base}")
-os.makedirs(out_subdir, exist_ok=True)
+out_dir   = os.path.join("content", f"{template_type}s", f"{fields.get('date','')}-{slug_base}")
+os.makedirs(out_dir, exist_ok=True)
 
-for lang in ("en","tr"):
-    context = build_context(lang)
-    rendered = tmpl.render(**context)
-    out_path = os.path.join(out_subdir, f"index.{lang}.md")
+for lang in ("en", "tr"):
+    ctx = build_context(lang)
+    print(f"[DEBUG] Context for {lang}: {ctx}")
+    rendered = tmpl.render(**ctx)
+    out_path = os.path.join(out_dir, f"index.{lang}.md")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(rendered)
    
