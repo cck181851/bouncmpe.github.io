@@ -1,37 +1,36 @@
-name: MS Thesis Defense Event
-description: Submit an MS thesis defense event
-title: "[EVENT] <MS Defense Title>"
-labels: ["event", "ms"]
+name: MSc Thesis Defense Submission
+description: Submit an MSc thesis defense announcement (EN + TR)
+title: "[MSc Defense] <Insert event title>"
+labels: ["event", "event-msc"]
 body:
+  # same structure as phd-event.yml
+  # Only the title/label differs
   - type: input
     id: title_en
     attributes:
-      label: "Thesis Title (EN)"
-      placeholder: "Example: Learning Robust Representations"
+      label: "Event Title (EN)"
     validations:
       required: true
 
   - type: input
     id: title_tr
     attributes:
-      label: "Tez Başlığı (TR)"
-      placeholder: "Örnek: Sağlam Temsillerin Öğrenilmesi"
+      label: "Event Title (TR)"
     validations:
       required: true
 
   - type: input
     id: name
     attributes:
-      label: "Candidate Name"
-      placeholder: "e.g. Elif Yılmaz"
+      label: "Speaker/Presenter Name"
     validations:
       required: true
 
   - type: input
     id: datetime
     attributes:
-      label: "Date and Time"
-      placeholder: "e.g. 2025-08-12T13:30:00"
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-08-01T14:00:00"
     validations:
       required: true
 
@@ -39,7 +38,7 @@ body:
     id: duration
     attributes:
       label: "Duration"
-      placeholder: "e.g. 45min"
+      placeholder: "2h"
     validations:
       required: true
 
@@ -47,30 +46,33 @@ body:
     id: location_en
     attributes:
       label: "Location (EN)"
-      placeholder: "e.g. Zoom or KA-05"
     validations:
       required: true
 
   - type: input
     id: location_tr
     attributes:
-      label: "Konum (TR)"
-      placeholder: "Örn. Zoom ya da KA-05"
+      label: "Location (TR)"
     validations:
       required: true
 
   - type: textarea
+    id: image_markdown
+    attributes:
+      label: "Image (optional)"
+      placeholder: "![poster](https://...)"
+
+  - type: textarea
     id: description_en
     attributes:
-      label: "Abstract (EN)"
-      placeholder: "Write the English abstract here..."
+      label: "Description (EN)"
     validations:
       required: true
 
   - type: textarea
     id: description_tr
     attributes:
-      label: "Özet (TR)"
-      placeholder: "Türkçe özeti buraya yazınız..."
+      label: "Description (TR)"
     validations:
       required: true
+
