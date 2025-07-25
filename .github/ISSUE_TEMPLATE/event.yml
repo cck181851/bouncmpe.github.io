@@ -20,7 +20,7 @@ body:
     id: title_en
     attributes:
       label: "Event Title (EN)"
-      placeholder: "Conditional Computation Techniques in DNNs"
+      placeholder: "Enter event title here"
     validations:
       required: true
 
@@ -28,7 +28,7 @@ body:
     id: title_tr
     attributes:
       label: "Event Title (TR)"
-      placeholder: "Koşullu Bilgi Kazanım ile Derin Sinir Ağları"
+      placeholder: "Enter event title here"
     validations:
       required: true
 
@@ -36,7 +36,7 @@ body:
     id: name
     attributes:
       label: "Speaker/Presenter Name"
-      placeholder: "Ufuk Can Biçici"
+      placeholder: "Enter presenter name here"
     validations:
       required: true
 
@@ -44,7 +44,7 @@ body:
     id: datetime
     attributes:
       label: "Date and Time (ISO format)"
-      placeholder: "2025-08-01T14:00:00"
+      placeholder: "Select a date and time"
     validations:
       required: true
 
@@ -66,7 +66,7 @@ body:
     id: location_en
     attributes:
       label: "Location (EN)"
-      placeholder: "AVŞ Hall"
+      placeholder: "Enter location here"
     validations:
       required: true
 
@@ -74,7 +74,7 @@ body:
     id: location_tr
     attributes:
       label: "Location (TR)"
-      placeholder: "Ali Vahit Şahiner Salonu"
+      placeholder: "Enter location here"
     validations:
       required: true
 
@@ -89,7 +89,7 @@ body:
     id: description_en
     attributes:
       label: "Description (EN)"
-      placeholder: "This thesis defense will cover conditional computation techniques."
+      placeholder: "Enter description here"
     validations:
       required: true
 
@@ -97,6 +97,7 @@ body:
     id: description_tr
     attributes:
       label: "Description (TR)"
-      placeholder: "Bu savunmada koşullu hesaplama teknikleri ele alınacaktır."
+      placeholder: "Enter description here"
     validations:
       required: true
+
