@@ -1,0 +1,14 @@
+---
+type: seminar
+title: {{ fields["title_" + lang] }}
+name: {{ fields["name"] }}
+datetime: {{ fields["datetime"] }}
+duration: {{ fields["duration"] }}
+location: {{ fields["location_" + lang] }}
+{% if thumbnail %}
+thumbnail: {{ thumbnail }}
+{% endif %}
+featured: false
+---
+
+{{ fields["description_" + lang] }}
