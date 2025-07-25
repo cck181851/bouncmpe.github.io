@@ -1,13 +1,12 @@
-name: PhD Thesis Defense Event
-description: Submit a PhD defense event.
-title: "[EVENT] <PhD Defense Title>"
-labels: ["event", "phd"]
+name: PhD Thesis Defense Submission
+description: Submit a PhD thesis defense announcement (EN + TR)
+title: "[PhD Defense] <Insert event title>"
+labels: ["event", "event-phd"]
 body:
   - type: input
     id: title_en
     attributes:
       label: "Event Title (EN)"
-      placeholder: "Efficient Vision Transformers"
     validations:
       required: true
 
@@ -15,15 +14,13 @@ body:
     id: title_tr
     attributes:
       label: "Event Title (TR)"
-      placeholder: "Verimli Görüntü Dönüştürücüler"
     validations:
       required: true
 
   - type: input
     id: name
     attributes:
-      label: "Candidate Name"
-      placeholder: "Elif Demir"
+      label: "Speaker/Presenter Name"
     validations:
       required: true
 
@@ -39,7 +36,7 @@ body:
     id: duration
     attributes:
       label: "Duration"
-      placeholder: "1h"
+      placeholder: "2h"
     validations:
       required: true
 
@@ -47,7 +44,6 @@ body:
     id: location_en
     attributes:
       label: "Location (EN)"
-      placeholder: "CompSci Seminar Room"
     validations:
       required: true
 
@@ -55,22 +51,26 @@ body:
     id: location_tr
     attributes:
       label: "Location (TR)"
-      placeholder: "Bilgisayar Bilimi Seminer Odası"
     validations:
       required: true
 
   - type: textarea
+    id: image_markdown
+    attributes:
+      label: "Image (optional)"
+      placeholder: "![poster](https://...)"
+
+  - type: textarea
     id: description_en
     attributes:
-      label: "Abstract (EN)"
-      placeholder: "This PhD thesis defense will present..."
+      label: "Description (EN)"
     validations:
       required: true
 
   - type: textarea
     id: description_tr
     attributes:
-      label: "Abstract (TR)"
-      placeholder: "Bu doktora savunması, ... sunacaktır."
+      label: "Description (TR)"
     validations:
       required: true
+
