@@ -41,10 +41,44 @@ body:
       required: true
 
   - type: input
-    id: datetime
+    id: date
     attributes:
-      label: "Date and Time (ISO format)"
-      placeholder: "Select a date and time"
+      label: "Date (YYYY-MM-DD)"
+      placeholder: "YYYY-MM-DD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: time
+    attributes:
+      label: "Time"
+      description: "Choose a time slot"
+      options:
+        - "09:00"
+        - "09:30"
+        - "10:00"
+        - "10:30"
+        - "11:00"
+        - "11:30"
+        - "12:00"
+        - "12:30"
+        - "13:00"
+        - "13:30"
+        - "14:00"
+        - "14:30"
+        - "15:00"
+        - "15:30"
+        - "16:00"
+        - "16:30"
+        - "17:00"
+        - "17:30"
+        - "18:00"
+        - "18:30"
+        - "19:00"
+        - "19:30"
+        - "20:00"
+        - "20:30"
+        - "21:00"
     validations:
       required: true
 
@@ -100,4 +134,5 @@ body:
       placeholder: "Enter description here"
     validations:
       required: true
+
 
