@@ -29,7 +29,7 @@ jobs:
         run: python scripts/issue_to_md.py
 
       - name: Create or Update Pull Request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v6       # ← singular, not plural
         with:
           branch: "auto/add-${{ env.ISSUE_NUMBER }}"
           commit-message: "Auto add: ${{ github.event.issue.title }}"
@@ -45,11 +45,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Close related pull requests
-        uses: peter-evans/close-pull-requests@v1
+        uses: actions/github-script@v6
         with:
-          repository: ${{ github.repository }}
-          head-ref: auto/add-${{ github.event.issue.number }}
-          state: closed
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = context.payload.issue.number;
+            const branchName = `auto/add-${issueNumber}`;
+            // List open PRs whose head branch is `owner:branchName`
+            const { data: pulls } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${branchName}`,
+              state: 'open'
+            });
+            for (const pr of pulls) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                state: 'closed'
+              });
+              console.log(`Closed PR #${pr.number} on branch ${branchName}`);
+            }
 
