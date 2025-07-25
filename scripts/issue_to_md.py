@@ -7,49 +7,41 @@ from github import Github
 from jinja2 import Environment, FileSystemLoader
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-REPO_NAME    = os.getenv("GITHUB_REPOSITORY")      # e.g. "bouncmpe/bouncmpe.github.io"
-ISSUE_NUMBER = int(os.getenv("ISSUE_NUMBER", "0")) # should be set in your workflow
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+REPO_NAME     = os.getenv("GITHUB_REPOSITORY")       # e.g. "bouncmpe/bouncmpe.github.io"
+ISSUE_NUMBER  = int(os.getenv("ISSUE_NUMBER", "0"))  # set in your workflow
+GITHUB_TOKEN  = os.getenv("GITHUB_TOKEN")
 TEMPLATES_DIR = "templates"
 UPLOADS_DIR   = os.path.join("assets", "uploads")
 
 # ─── INITIALIZE ────────────────────────────────────────────────────────────────
 if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
-    raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set in env")
+    raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set in environment")
 
-gh   = Github(GITHUB_TOKEN)
-repo = gh.get_repo(REPO_NAME)
+gh    = Github(GITHUB_TOKEN)
+repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
 
 print(f"[DEBUG] Processing issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE FIELDS ──────────────────────────────────────────────────────────────
 def parse_fields(body: str):
-    """
-    Parses all "### Label\n\nvalue" blocks into a dict:
-      { 'label_name': 'the user input', … }
-    Normalizes keys to lowercase_underscored.
-    """
-    field_pattern = re.compile(
+    pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\n\n(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
     )
-    matches = field_pattern.findall(body)
     parsed = {}
-    for label, val in matches:
-        key = label.strip().lower().replace(" ", "_")
+    for label, val in pattern.findall(body or ""):
+        key = label.strip().lower().replace(" ", "_").replace("/", "_").replace("(", "").replace(")", "")
         parsed[key] = val.strip()
     return parsed
 
-fields = parse_fields(issue.body or "")
+fields = parse_fields(issue.body)
 print(f"[DEBUG] Parsed fields: {fields}")
 
 # ─── DETERMINE TYPE ────────────────────────────────────────────────────────────
-# If the form had an "event_type" dropdown → treat as event,
-# otherwise assume news.
-is_event = "event_type" in fields
-template_type = "event" if is_event else "news"
-template_file = f"{template_type}.md.j2"
+is_event     = "event_type" in fields
+template_type= "event" if is_event else "news"
+template_file= f"{template_type}.md.j2"
 print(f"[DEBUG] Inferred template_type = {template_type!r}")
 
 # ─── SLUGIFY ───────────────────────────────────────────────────────────────────
@@ -61,16 +53,9 @@ def slugify(text: str) -> str:
 
 # ─── IMAGE DOWNLOAD ────────────────────────────────────────────────────────────
 def download_image(md_input: str) -> str:
-    """
-    Accepts either:
-      - Markdown: ![alt](https://…)
-      - HTML: <img src="https://…">
-    Returns the local path under UPLOADS_DIR, or empty string.
-    """
-    # find URL
-    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
-    if not m:
-        m = re.search(r'src="(https?://[^"]+)"', md_input)
+    # match markdown or HTML <img>
+    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input) \
+         or re.search(r'src="(https?://[^"]+)"', md_input)
     if not m:
         print("[WARN] No image URL found in:", md_input)
         return ""
@@ -79,15 +64,9 @@ def download_image(md_input: str) -> str:
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
 
-    # infer extension
     ct = resp.headers.get("Content-Type", "")
-    ext = ""
-    if "png"  in ct: ext = ".png"
-    if "jpeg" in ct or "jpg" in ct: ext = ".jpg"
-    if "gif"  in ct: ext = ".gif"
-
-    # filename from URL
-    filename = os.path.basename(url.split("?",1)[0])
+    ext = ".png" if "png" in ct else ".jpg" if ("jpeg" in ct or "jpg" in ct) else ".gif" if "gif" in ct else ""
+    filename = os.path.basename(url.split("?", 1)[0])
     if not os.path.splitext(filename)[1] and ext:
         filename += ext
 
@@ -96,60 +75,49 @@ def download_image(md_input: str) -> str:
     with open(save_path, "wb") as f:
         f.write(resp.content)
     print(f"[DEBUG] Image saved to {save_path}")
-    # return relative path for frontmatter
     return f"uploads/{filename}"
 
-# ─── BUILD CONTEXT ─────────────────────────────────────────────────────────────
-# Shared fields:
-title_key = "news_title_(en)" if not is_event else "event_title_(en)"
-title = fields.get(title_key, issue.title)
-date  = fields.get("date", "")
-desc  = fields.get("description_(en)", "")
-img_md = fields.get("image_markdown", "") or fields.get("image_(optional,_drag_&_drop)", "")
-thumbnail = download_image(img_md) if img_md else ""
+# ─── TEMPLATE CONTEXT BUILDER ──────────────────────────────────────────────────
+def build_context(lang: str):
+    ctx = {
+        "date": fields.get("date", ""),
+        "thumbnail": download_image(fields.get("image_markdown", "")) if not is_event
+                     else download_image(fields.get("image_(optional,_drag_&_drop)", "")),
+    }
 
-context = {
-    "title": title,
-    "description": desc,
-    "date": date,
-    "thumbnail": thumbnail,
-    "content": fields.get("content_(en)", "") if not is_event else fields.get("description_(en)", "")
-}
-
-if is_event:
-    context.update({
-        "event_type": fields.get("event_type", ""),
-        "name":       fields.get("speaker/presenter_name", ""),
-        "datetime":   fields.get("date_and_time_(iso_format)", ""),
-        "duration":   fields.get("duration", ""),
-        "location":   fields.get("location_(en)", "")
-    })
-
-print(f"[DEBUG] Rendering template {template_file} with context:")
-for k,v in context.items():
-    print(f"  - {k}: {v!r}")
+    if is_event:
+        # event
+        ctx.update({
+            "event_type": fields.get("event_type", ""),
+            "title":       fields.get(f"event_title_{lang}", ""),
+            "name":        fields.get("speaker_presenter_name", ""),
+            "datetime":    fields.get("date_and_time_iso_format", ""),
+            "duration":    fields.get("duration", ""),
+            "location":    fields.get(f"location_{lang}", ""),
+            "description": fields.get(f"description_{lang}", ""),
+        })
+    else:
+        # news
+        ctx.update({
+            "title":       fields.get(f"news_title_{lang}", ""),
+            "description": fields.get(f"short_description_{lang}", ""),
+            "content":     fields.get(f"full_content_{lang}", ""),
+        })
+    return ctx
 
 # ─── RENDER & WRITE ────────────────────────────────────────────────────────────
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
-try:
-    tmpl = env.get_template(template_file)
-except Exception as e:
-    raise FileNotFoundError(f"Could not load template '{template_file}' from '{TEMPLATES_DIR}'") from e
+tmpl = env.get_template(template_file)
 
-output = tmpl.render(**context)
+slug_base = slugify(fields.get(f"{template_type}_title_en", issue.title))
+out_subdir = os.path.join("content", f"{template_type}s", f"{fields.get('date', '')}-{slug_base}")
+os.makedirs(out_subdir, exist_ok=True)
 
-# determine output path
-slug = slugify(title)
-subdir = "events" if is_event else "news"
-base_dir = os.path.join("content", subdir, f"{date}-{slug}")
-os.makedirs(base_dir, exist_ok=True)
-
-# write both EN and TR
 for lang in ("en","tr"):
-    fname = os.path.join(base_dir, f"index.{lang}.md")
-    with open(fname, "w", encoding="utf-8") as f:
-        f.write(output)
+    context = build_context(lang)
+    rendered = tmpl.render(**context)
+    out_path = os.path.join(out_subdir, f"index.{lang}.md")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(rendered)
    
-
-
 
