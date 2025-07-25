@@ -1,0 +1,97 @@
+name: Special Event Submission
+description: Submit a special event (e.g., workshop, hackathon) in English and Turkish.
+title: "[EVENT][Special] <Insert English title here>"
+labels: ["event","special"]
+body:
+  - type: dropdown
+    id: event_type
+    attributes:
+      label: "Event Type"
+      options:
+        - special
+      description: "Fixed to Special events"
+    validations:
+      required: true
+
+  - type: input
+    id: title_en
+    attributes:
+      label: "Event Title (EN)"
+      placeholder: "Summer Hackathon"
+    validations:
+      required: true
+
+  - type: input
+    id: title_tr
+    attributes:
+      label: "Event Title (TR)"
+      placeholder: "Yaz Hackathon'u"
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: "Organizer Name"
+      placeholder: "Tech Club"
+    validations:
+      required: true
+
+  - type: input
+    id: datetime
+    attributes:
+      label: "Date and Time (ISO format)"
+      placeholder: "2025-08-25T09:00:00"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: duration
+    attributes:
+      label: "Duration"
+      options:
+        - 2h
+        - 4h
+        - 8h
+      description: "How long the event will last"
+    validations:
+      required: true
+
+  - type: input
+    id: location_en
+    attributes:
+      label: "Location (EN)"
+      placeholder: "Innovation Lab"
+    validations:
+      required: true
+
+  - type: input
+    id: location_tr
+    attributes:
+      label: "Location (TR)"
+      placeholder: "Yenilik Laboratuvarı"
+    validations:
+      required: true
+
+  - type: textarea
+    id: image_markdown
+    attributes:
+      label: "Poster Image (optional)"
+      description: "Drag & drop a poster image; GitHub will provide a Markdown link."
+      placeholder: "![alt](https://user-images.githubusercontent.com/.../poster.png)"
+
+  - type: textarea
+    id: description_en
+    attributes:
+      label: "Short Description (EN)"
+      placeholder: "A 24‑hour coding marathon."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description_tr
+    attributes:
+      label: "Short Description (TR)"
+      placeholder: "24 saatlik kodlama maratonu."
+    validations:
+      required: true
