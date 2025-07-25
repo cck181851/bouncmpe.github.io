@@ -24,18 +24,24 @@ print(f"[DEBUG] Processing issue #{ISSUE_NUMBER}: {issue.title!r}")
 # ─── PARSE FIELDS ──────────────────────────────────────────────────────────────
 def parse_fields(body: str):
     import re
-    # match a heading (### …) then one or more newlines, then its content up to the next heading
+    print("[DEBUG parse_fields] Raw issue body:")
+    print(body)
+    # match headings and their content (even if only single newline)
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
     )
     parsed = {}
     for label, val in pattern.findall(body or ""):
-        # remove parenthetical hints like "(YYYY‑MM‑DD)"
+        # strip parenthetical hints like "(YYYY‑MM‑DD)"
         clean = re.sub(r"\s*\([^)]*\)", "", label).lower()
-        # strip punctuation, convert spaces to underscores
+        # remove punctuation, normalize spaces to underscores
         key = re.sub(r"[^\w\s]", "", clean).strip().replace(" ", "_")
+        print(f"[DEBUG parse_fields] Matched label: {label!r}")
+        print(f"                     → key: {key!r}")
+        print(f"                     → value (first 50 chars): {val.strip()[:50]!r}")
         parsed[key] = val.strip()
+    print(f"[DEBUG parse_fields] Parsed keys: {list(parsed.keys())}")
     return parsed
 
 
