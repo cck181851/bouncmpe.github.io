@@ -1,149 +1,100 @@
 import os
 import re
-import unicodedata
 import requests
-from urllib.parse import urlparse
+from github import Github
 from jinja2 import Environment, FileSystemLoader
+from datetime import datetime
 
-# 1) Read inputs from environment variables
-labels = os.getenv("ISSUE_LABELS", "").lower()
-body = os.getenv("ISSUE_BODY", "").strip()
-is_news = "news" in labels
+# --- CONFIG ---
+REPO_NAME = os.getenv("GITHUB_REPOSITORY")  # e.g. 'bouncmpe/bouncmpe.github.io'
+ISSUE_NUMBER = int(os.getenv("ISSUE_NUMBER"))
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+TEMPLATES_DIR = "templates"
 
-# 2) Setup Jinja2 template environment
-env = Environment(
-    loader=FileSystemLoader("templates"),
-    autoescape=False
-)
+# --- INIT ---
+gh = Github(GITHUB_TOKEN)
+repo = gh.get_repo(REPO_NAME)
+issue = repo.get_issue(number=ISSUE_NUMBER)
 
-# 3) Slugify function (for folder names)
-def slugify(text):
-    text = unicodedata.normalize("NFKD", text)
-    text = text.encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^\w\s-]", "", text.lower())
-    return re.sub(r"[-\s]+", "-", text).strip("-_ ")
+# --- Extract fields ---
+def parse_fields(body):
+    """
+    Converts Markdown-style form fields into a dictionary
+    """
+    field_pattern = re.compile(r"### (.*?)\n\n(.*?)(?=\n###|\Z)", re.DOTALL)
+    matches = field_pattern.findall(body)
+    return {k.strip().lower().replace(" ", "_"): v.strip() for k, v in matches}
 
-# 4) Parse GitHub Issue body into label-value dictionary
-def parse_issue_body(md):
-    fields = {}
-    blocks = re.split(r"^#{1,6}\s+", md, flags=re.MULTILINE)[1:]
-    for blk in blocks:
-        lines = blk.splitlines()
-        if not lines:
-            continue
-        label = lines[0].strip()
-        value = "\n".join(lines[1:]).strip()
-        fields[label] = value
-    return fields
+fields = parse_fields(issue.body or "")
 
-parsed = parse_issue_body(body)
+# Debug print
+print("Parsed fields:", fields)
 
-# 5) Safe field lookup
-def get_field(label):
-    return parsed.get(label, "").strip()
+# --- Required fields ---
+template_type = fields.get("template_type", "").lower()  # 'event' or 'news'
+title = fields.get("title", issue.title)
+description = fields.get("description", "")
+thumbnail_url = fields.get("poster_or_cover_image", "")
+content = fields.get("description", "")
+date_str = fields.get("date", datetime.utcnow().strftime("%Y-%m-%d"))
 
-# 6) Download image (if provided)
-def download_image(md_input):
-    print(f" Raw image input: {md_input}")
-    url = None
-    m = re.search(r"!\[[^\]]*\]\((https?://[^)]+)\)", md_input)
-    if m:
-        url = m.group(1)
-    else:
-        m2 = re.search(r'src=\"(https?://[^\"]+)\"', md_input)
-        if m2:
-            url = m2.group(1)
-    if not url:
-        print(" No valid image URL found.")
-        return ""
+# Additional fields for event
+event_fields = {
+    "event_type": fields.get("event_type", "General"),
+    "name": fields.get("event_name", ""),
+    "datetime": fields.get("start_date_and_time", ""),
+    "duration": fields.get("duration", ""),
+    "location": fields.get("location", "")
+}
 
-    print(f" Downloading image from: {url}")
-    try:
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f" Failed to fetch image: {e}")
-        return ""
+# --- Download thumbnail ---
+def download_image(url, save_dir):
+    if not url or not url.startswith("http"):
+        return None
+    response = requests.get(url)
+    if response.status_code == 200:
+        filename = os.path.basename(url.split("?")[0])
+        os.makedirs(save_dir, exist_ok=True)
+        path = os.path.join(save_dir, filename)
+        with open(path, "wb") as f:
+            f.write(response.content)
+        return filename
+    return None
 
-    # Infer file extension
-    ct = resp.headers.get("Content-Type", "")
-    ext = ''
-    if 'png' in ct:
-        ext = '.png'
-    elif 'jpeg' in ct or 'jpg' in ct:
-        ext = '.jpg'
-    elif 'gif' in ct:
-        ext = '.gif'
-
-    # Build filename from URL
-    path_part = urlparse(url).path
-    name = os.path.basename(path_part) or 'image'
-    if not os.path.splitext(name)[1] and ext:
-        name += ext
-
-    save_dir = os.path.join('assets', 'uploads')
-    os.makedirs(save_dir, exist_ok=True)
-    save_path = os.path.join(save_dir, name)
-
-    try:
-        with open(save_path, 'wb') as f:
-            f.write(resp.content)
-        print(f" Saved image to: {save_path}")
-        return f"uploads/{name}"
-    except Exception as e:
-        print(f" Error saving image: {e}")
-        return ""
-
-# 7) Determine content type and path
-if is_news:
-    date = get_field('Date (YYYY-MM-DD)')
-    slug = slugify(get_field('News Title (EN)'))
-    base = f"content/news/{date}-news-{slug}"
-    template_file = "news.md.j2"
+thumbnail_filename = download_image(thumbnail_url, f"static/images/{template_type}")
+if thumbnail_filename:
+    thumbnail_relative_path = f"/images/{template_type}/{thumbnail_filename}"
 else:
-    raw_dt = get_field('Date and Time (ISO format)')
-    date = raw_dt.split('T')[0]
-    slug = slugify(get_field('Event Title (EN)'))
-    base = f"content/events/{date}-event-{slug}"
-    template_file = "event.md.j2"
+    thumbnail_relative_path = None
 
-os.makedirs(base, exist_ok=True)
+# --- Jinja render ---
+env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
+template_file = f"{template_type}.md.j2"
+template = env.get_template(template_file)
 
-# 8) Process image
-img_label = 'Image (drag & drop here)' if is_news else 'Image (optional, drag & drop)'
-img_md = get_field(img_label)
-thumbnail_path = download_image(img_md) if img_md else ''
+context = {
+    "title": title,
+    "description": description,
+    "date": date_str,
+    "thumbnail": thumbnail_relative_path,
+    "content": content
+}
 
-# 9) Render Jinja template for both English and Turkish
-for lang in ['en', 'tr']:
-    context = {}
+if template_type == "event":
+    context.update(event_fields)
 
-    if is_news:
-        context = {
-            'title': get_field(f'News Title ({lang.upper()})'),
-            'description': get_field(f'Short Description ({lang.upper()})'),
-            'date': date,
-            'thumbnail': thumbnail_path,
-            'content': get_field(f'Full Content ({lang.upper()})')
-        }
-    else:
-        context = {
-            'event_type': get_field('Event Type'),  # From dropdown
-            'title': get_field(f'Event Title ({lang.upper()})'),
-            'name': get_field('Speaker/Presenter Name'),
-            'datetime': raw_dt,
-            'duration': get_field('Duration'),
-            'location': get_field(f'Location ({lang.upper()})'),
-            'thumbnail': thumbnail_path,
-            'description': get_field(f'Description ({lang.upper()})')
-        }
+output_md = template.render(context)
 
-    # Load and render Jinja template
-    template = env.get_template(template_file)
-    output = template.render(**context)
+# --- Write file ---
+slug = re.sub(r'\W+', '-', title.lower()).strip("-")
+filename = f"{slug}.md"
+output_dir = f"content/{template_type}s"
+os.makedirs(output_dir, exist_ok=True)
 
-    # Write markdown file
-    out_file = f"{base}/index.{lang}.md"
-    with open(out_file, 'w', encoding='utf-8') as f:
-        f.write(output)
-    print(f" Created: {out_file}")
+output_path = os.path.join(output_dir, filename)
+with open(output_path, "w", encoding="utf-8") as f:
+    f.write(output_md)
+
+
+
+
