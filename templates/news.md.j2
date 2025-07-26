@@ -1,10 +1,9 @@
----
-title: "{{ title }}"
-description: "{{ description }}"
-date: {{ date }}
-{% if thumbnail %}
-thumbnail: "{{ thumbnail }}"
-{% endif %}
----
+{% extends "_base.md.j2" %}
 
+{% block front_matter %}
+description: "{{ description }}"
+{% endblock %}
+
+{% block content %}
 {{ content }}
+{% endblock %}
