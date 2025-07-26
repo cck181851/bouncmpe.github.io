@@ -50,44 +50,26 @@ def parse_fields(body: str):
 
 fields = parse_fields(issue.body)
 
-# ─── NORMALIZE FIELD KEYS FOR SIMPLER ACCESS ──────────────────────────────────
-key_map = {
-    'event_type': 'event_type',
-    'event_title__en': 'title_en',
-    'title_en': 'title_en',
-    'event_title__tr': 'title_tr',
-    'title_tr': 'title_tr',
-    'description__en': 'description_en',
-    'short_description__en': 'description_en',
-    'description__tr': 'description_tr',
-    'short_description__tr': 'description_tr',
-    'full_content__en': 'content_en',
-    'full_content__tr': 'content_tr',
-    'speaker_presenter_name': 'name',
-    'date': 'date',
-    'time': 'time',
-    'duration': 'duration',
-    'location__en': 'location_en',
-    'location__tr': 'location_tr',
-    'image__optional__drag___drop': 'image_markdown',
-    'image_markdown': 'image_markdown'
-}
-normalized = {}
-for raw, val in fields.items():
-    if raw in key_map and val:
-        normalized[key_map[raw]] = val
-print(f"[DEBUG] Normalized fields: {normalized}")
-fields = normalized
+# ─── EXTRACT VARIABLES ─────────────────────────────────────────────────────────
+# Use raw parsed keys for clarity
+event_type      = fields.get('event_type', '')
+title_en        = fields.get('event_title__en', issue.title)
+title_tr        = fields.get('event_title__tr', '')
+date_val        = fields.get('date', '')
+time_val        = fields.get('time', '')
+duration        = fields.get('duration', '')
+speaker_name    = fields.get('speaker_presenter_name', '')
+location_en     = fields.get('location__en', '')
+location_tr     = fields.get('location__tr', '')
+desc_en         = fields.get('description__en') or fields.get('short_description__en', '')
+desc_tr         = fields.get('description__tr') or fields.get('short_description__tr', '')
+image_md        = fields.get('image__optional__drag___drop') or fields.get('image_markdown', '')
+print(f"[DEBUG] Variables: event_type={event_type}, title_en={title_en}, speaker={speaker_name}, date={date_val}, time={time_val}, location_en={location_en}, desc_en={desc_en}")
 
-# ─── DETERMINE TEMPLATE
-is_event = bool(fields.get('event_type'))
-event_type = fields.get('event_type')
-if is_event:
-    template_path = f"events/{event_type}.md.j2"
-    out_subdir = 'events'
-else:
-    template_path = "news.md.j2"
-    out_subdir = 'news'
+# ─── DETERMINE TEMPLATE & OUTPUT DIR
+is_event = bool(event_type)
+template_path = f"events/{event_type}.md.j2" if is_event else "news.md.j2"
+out_subdir = 'events' if is_event else 'news'
 print(f"[DEBUG] Using template: {template_path}")
 
 # ─── SLUGIFY UTILITY
@@ -97,10 +79,15 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-_")
 
-# ─── IMAGE DOWNLOAD
-def download_image(md_input: str) -> str:
-    print(f"[DEBUG] Raw image markdown input: {md_input}")
-    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
+# ─── IMAGE DOWNLOAD (supports markdown and HTML)
+
+def download_image(input_str: str) -> str:
+    print(f"[DEBUG] Raw image input: {input_str}")
+    # markdown image
+    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str)
+    # html <img src="..."
+    if not m:
+        m = re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
     if not m:
         print("[DEBUG] No image URL found")
         return ""
@@ -117,76 +104,72 @@ def download_image(md_input: str) -> str:
     print(f"[DEBUG] Saved image to: {path}")
     return f"uploads/{filename}"
 
-img_field = fields.get('image_markdown', '')
-thumbnail = download_image(img_field) if img_field else ""
+thumbnail = download_image(image_md)
 print(f"[DEBUG] thumbnail path: {thumbnail}")
 
-# ─── BUILD CONTEXT
-# Combine date and time into ISO datetime for events
-date_val = fields.get('date', '')
-time_val = fields.get('time', '')
+# ─── BUILD CONTEXTS
+# Combine date and time for events
 datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
 
-ctx = {
-    'title': fields.get('title_en', issue.title),
+ctx_en = {
+    'title': title_en,
     'date': date_val,
-    'thumbnail': thumbnail
+    'thumbnail': thumbnail,
 }
-if out_subdir == 'events':
-    ctx.update({
+ctx_tr = {
+    'title': title_tr,
+    'date': date_val,
+    'thumbnail': thumbnail,
+}
+
+if is_event:
+    ctx_en.update({
+        'event_type': event_type,
+        'speaker': speaker_name,
+        'duration': duration,
+        'location': location_en,
         'datetime': datetime_iso,
-        'description': fields.get('description_en', ''),
-        'name': fields.get('name', ''),
-        'duration': fields.get('duration', ''),
-        'location': fields.get('location_en', '')
+        'description': desc_en
+    })
+    ctx_tr.update({
+        'event_type': event_type,
+        'speaker': speaker_name,
+        'duration': duration,
+        'location': location_tr,
+        'datetime': datetime_iso,
+        'description': desc_tr
     })
 else:
-    ctx.update({
-        'description': fields.get('description_en', ''),
-        'content': fields.get('content_en', '')
+    ctx_en.update({
+        'description': desc_en,
+        'content': fields.get('content__en', '')
     })
-print(f"[DEBUG] Final context for template rendering: {ctx}")
+    ctx_tr.update({
+        'description': desc_tr,
+        'content': fields.get('content__tr', '')
+    })
+
+print(f"[DEBUG] ctx_en: {ctx_en}")
+print(f"[DEBUG] ctx_tr: {ctx_tr}")
 
 # ─── RENDER & WRITE FILES ──────────────────────────────────────────────────────
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
-slug_base = slugify(ctx['title'])
-out_dir = os.path.join('content', out_subdir, f"{ctx['date']}-{slug_base}")
+slug_base = slugify(title_en)
+out_dir = os.path.join('content', out_subdir, f"{date_val}-{slug_base}")
 print(f"[DEBUG] Output directory: {out_dir}")
 
 os.makedirs(out_dir, exist_ok=True)
 
-# Render English version
-en_out = tmpl.render(**ctx)
+# English
 out_path_en = os.path.join(out_dir, 'index.en.md')
 with open(out_path_en, 'w', encoding='utf-8') as f:
-    f.write(en_out)
+    f.write(tmpl.render(**ctx_en))
 print(f"[DEBUG] Wrote English markdown: {out_path_en}")
 
-# Render Turkish version
-if out_subdir == 'events':
-    tr_ctx = {
-        'title': fields.get('title_tr', ''),
-        'date': date_val,
-        'thumbnail': thumbnail,
-        'datetime': datetime_iso,
-        'description': fields.get('description_tr', ''),
-        'name': fields.get('name', ''),
-        'duration': fields.get('duration', ''),
-        'location': fields.get('location_tr', '')
-    }
-else:
-    tr_ctx = {
-        'title': fields.get('title_tr', ''),
-        'date': date_val,
-        'thumbnail': thumbnail,
-        'description': fields.get('description_tr', ''),
-        'content': fields.get('content_tr', '')
-    }
-print(f"[DEBUG] Turkish context: {tr_ctx}")
-tr_out = tmpl.render(**tr_ctx)
+# Turkish
 out_path_tr = os.path.join(out_dir, 'index.tr.md')
 with open(out_path_tr, 'w', encoding='utf-8') as f:
-    f.write(tr_out)
+    f.write(tmpl.render(**ctx_tr))
 print(f"[DEBUG] Wrote Turkish markdown: {out_path_tr}")
