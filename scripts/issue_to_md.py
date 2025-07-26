@@ -18,7 +18,7 @@ UPLOADS_DIR   = os.path.join("static", "uploads")
 if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
     raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set")
 
-# GitHub client
+# ─── GITHUB CLIENT & ISSUE ─────────────────────────────────────────────────────
 gh    = Github(GITHUB_TOKEN)
 repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
@@ -26,7 +26,7 @@ print(f"[DEBUG] Loaded Issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
-    # Try the JSON blob that GitHub Forms embeds
+    # 1) GitHub Issue Forms embed a JSON blob
     m = re.search(r"<!--\s*({.*})\s*-->", body or "", re.DOTALL)
     if m:
         try:
@@ -35,12 +35,16 @@ def parse_fields(body: str):
             return data
         except json.JSONDecodeError as e:
             print("[DEBUG] JSON parse error:", e)
-    # Fallback to markdown headings
-    pattern = re.compile(r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)", re.MULTILINE | re.DOTALL)
+    # 2) Fallback: headings-based parsing
+    pattern = re.compile(
+        r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
+        re.MULTILINE | re.DOTALL
+    )
     parsed = {}
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
+    # Normalize date key
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
     print("[DEBUG] Fallback parsed fields:", parsed)
@@ -48,106 +52,132 @@ def parse_fields(body: str):
 
 fields = parse_fields(issue.body)
 
-# ─── HELPER ───────────────────────────────────────────────────────────────────
-def get_field(keys, default=""):
-    for k in keys:
-        if k in fields and fields[k]:
-            return fields[k]
+# ─── HELPER TO RETRIEVE FIELDS ─────────────────────────────────────────────────
+def get_field(variants, default=""):
+    for name in variants:
+        if name in fields and fields[name]:
+            return fields[name]
     return default
 
-# ─── EXTRACT COMMON FIELDS ────────────────────────────────────────────────────
+# ─── COMMON VARIABLES ─────────────────────────────────────────────────────────
+# Always present on both News and Event
+title_en = get_field(['title_en','event_title__en','news_title__en'], issue.title)
+title_tr = get_field(['title_tr','event_title__tr','news_title__tr'], '')
+date_val = get_field(['date'], '')
+time_val = get_field(['time'], '')
+
+# ─── NEWS‑SPECIFIC VARIABLES ───────────────────────────────────────────────────
+desc_en    = get_field(['description_en','short_description_en','description__en'], '')
+content_en = get_field(['content_en','full_content_en','content__en'], '')
+desc_tr    = get_field(['description_tr','short_description_tr','description__tr'], '')
+content_tr = get_field(['content_tr','full_content_tr','content__tr'], '')
+
+# ─── EVENT‑SPECIFIC VARIABLES ──────────────────────────────────────────────────
 event_type   = get_field(['event_type'], '')
-title_en     = get_field(['title_en','event_title__en'], issue.title)
-title_tr     = get_field(['title_tr','event_title__tr'], '')
-date_val     = get_field(['date'], '')
-time_val     = get_field(['time'], '')
+speaker_name = get_field(['name','speaker_presenter_name'], '')
 duration     = get_field(['duration'], '')
+location_en  = get_field(['location_en','location__en'], '')
+location_tr  = get_field(['location_tr','location__tr'], '')
+description_e = get_field(['description_en','description__en'], '')
+description_t = get_field(['description_tr','description__tr'], '')
 
-# ─── EXTRACT NEWS‐SPECIFIC FIELDS ─────────────────────────────────────────────
-# description = “Short Description (EN)” in the form
-desc_en = get_field([
-    'description_en',
-    'short_description_en',
-    'short_description__en',
-    'description__en'
-], '')
-# full content = “Full Content (EN)” in the form
-content_en = get_field([
-    'content_en',
-    'full_content_en',
-    'full_content__en'
-], '')
-# image markdown
-image_md  = get_field([
-    'image_markdown',
-], '')
+# ─── IMAGE FIELD (both News & Event) ──────────────────────────────────────────
+image_md = get_field(['image_markdown','image__optional__drag___drop'], '')
 
-print(f"[DEBUG] News: desc_en={desc_en!r}, content_en={content_en!r}, image_md={image_md!r}")
-
-# ─── IMAGE DOWNLOAD (with extension) ───────────────────────────────────────────
+# ─── DOWNLOAD IMAGE WITH EXTENSION ─────────────────────────────────────────────
 def download_image(md: str) -> str:
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md) \
         or re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", md)
     if not m:
         return ""
     url = m.group(1)
-    r   = requests.get(url, timeout=15)
-    r.raise_for_status()
-    ext = mimetypes.guess_extension(r.headers.get('Content-Type','').split(';')[0]) \
-          or os.path.splitext(url)[1] or '.png'
+    resp = requests.get(url, timeout=15)
+    resp.raise_for_status()
+    # detect extension
+    ctype = resp.headers.get('Content-Type','').split(';')[0]
+    ext = mimetypes.guess_extension(ctype) or os.path.splitext(url)[1] or '.png'
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     base = os.path.basename(url).split('?')[0]
     name = os.path.splitext(base)[0] + ext
     dest = os.path.join(UPLOADS_DIR, name)
     with open(dest, 'wb') as f:
-        f.write(r.content)
-    print(f"[DEBUG] Saved image to {dest}")
+        f.write(resp.content)
+    print(f"[DEBUG] Saved image to {dest} (Content-Type: {ctype})")
     return f"/uploads/{name}"
 
 thumbnail = download_image(image_md)
 
-# ─── BUILD CONTEXT & RENDER ───────────────────────────────────────────────────
+# ─── BUILD ROUTE & TEMPLATE SELECTION ──────────────────────────────────────────
+is_event = bool(event_type)
 datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
-ctx_common   = {
-    'title':     title_en,
-    'date':      date_val,
-    'time':      time_val,
-    'thumbnail': thumbnail,
-}
 
-if event_type:
-    # … your event logic …
-    pass
+if is_event:
+    # Event context
+    ctx_en = {
+        'title':     title_en,
+        'date':      date_val,
+        'time':      time_val,
+        'thumbnail': thumbnail,
+        'event_type': event_type,
+        'datetime':   datetime_iso,
+        'speaker':    speaker_name,
+        'duration':   duration,
+        'location':   location_en,
+        'description': description_e,
+    }
+    ctx_tr = {
+        'title':       title_tr or title_en,
+        'date':        date_val,
+        'time':        time_val,
+        'thumbnail':   thumbnail,
+        'event_type':  event_type,
+        'datetime':    datetime_iso,
+        'speaker':     speaker_name,
+        'duration':    duration,
+        'location':    location_tr,
+        'description': description_t,
+    }
+    template_path = f"events/{event_type}.md.j2"
+    out_subdir    = "events"
 else:
-    # NEWS
-    ctx_en       = { **ctx_common, 'description': desc_en, 'content': content_en }
+    # News context
+    ctx_en = {
+        'title':     title_en,
+        'date':      date_val,
+        'time':      time_val,
+        'thumbnail': thumbnail,
+        'description': desc_en,
+        'content':     content_en,
+    }
+    ctx_tr = {
+        'title':       title_tr or title_en,
+        'date':        date_val,
+        'time':        time_val,
+        'thumbnail':   thumbnail,
+        'description': desc_tr,
+        'content':     content_tr,
+    }
     template_path = "news.md.j2"
+    out_subdir    = "news"
 
-# Turkish version (similarly)
-ctx_tr = ctx_en.copy()
-ctx_tr.update({
-    'title': title_tr or title_en,
-    'description': get_field([
-        'description_tr','short_description_tr','description__tr'
-    ], ''),
-    'content':     get_field([
-        'content_tr','full_content_tr','content__tr','full_content__tr'
-    ], '')
-})
+print(f"[DEBUG] Rendering {'Event' if is_event else 'News'} using {template_path}")
 
-# Render with Jinja
+# ─── RENDER & WRITE ───────────────────────────────────────────────────────────
 env  = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
-# Slugify
+# slugify English title
 slug = unicodedata.normalize("NFKD", title_en).encode("ascii","ignore").decode().lower()
 slug = re.sub(r"[^\w\s-]","", slug)
 slug = re.sub(r"[-\s]+","-", slug)
 
-out_dir = os.path.join("content", "news", f"{date_val}-{slug}")
+out_dir = os.path.join("content", out_subdir, f"{date_val}-{slug}")
 os.makedirs(out_dir, exist_ok=True)
 
-for lang, ctx, fname in [("en", ctx_en, "index.en.md"), ("tr", ctx_tr, "index.tr.md")]:
+for lang, ctx, fname in [
+    ("en", ctx_en, "index.en.md"),
+    ("tr", ctx_tr, "index.tr.md")
+]:
     path = os.path.join(out_dir, fname)
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
