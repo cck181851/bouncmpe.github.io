@@ -51,22 +51,29 @@ def parse_fields(body: str):
 fields = parse_fields(issue.body)
 
 # ─── EXTRACT VARIABLES ─────────────────────────────────────────────────────────
-# Use raw parsed keys for clarity
+# Support both JSON field IDs (from issue form) and fallback heading keys
 event_type      = fields.get('event_type', '')
-title_en        = fields.get('event_title__en', issue.title)
-title_tr        = fields.get('event_title__tr', '')
+# Title: JSON uses title_en/title_tr, fallback uses event_title__en/event_title__tr
+title_en        = fields.get('title_en') or fields.get('event_title__en') or issue.title
+title_tr        = fields.get('title_tr') or fields.get('event_title__tr') or ''
+# Date & Time
 date_val        = fields.get('date', '')
 time_val        = fields.get('time', '')
+# Duration
 duration        = fields.get('duration', '')
-speaker_name    = fields.get('speaker_presenter_name', '')
-location_en     = fields.get('location__en', '')
-location_tr     = fields.get('location__tr', '')
-desc_en         = fields.get('description__en') or fields.get('short_description__en', '')
-desc_tr         = fields.get('description__tr') or fields.get('short_description__tr', '')
-image_md        = fields.get('image__optional__drag___drop') or fields.get('image_markdown', '')
+# Speaker: JSON key 'name', fallback key 'speaker_presenter_name'
+speaker_name    = fields.get('name') or fields.get('speaker_presenter_name', '')
+# Location: JSON uses location_en/location_tr, fallback uses those keys as well
+location_en     = fields.get('location_en') or fields.get('location__en', '')
+location_tr     = fields.get('location_tr') or fields.get('location__tr', '')
+# Description: JSON uses description_en/description_tr, fallback uses description__en/_tr or short_description variants
+desc_en         = fields.get('description_en') or fields.get('short_description_en') or fields.get('description__en') or fields.get('short_description__en', '')
+desc_tr         = fields.get('description_tr') or fields.get('short_description_tr') or fields.get('description__tr') or fields.get('short_description__tr', '')
+# Image: JSON key 'image_markdown', fallback image__optional... key
+image_md        = fields.get('image_markdown') or fields.get('image__optional__drag___drop', '')
 print(f"[DEBUG] Variables: event_type={event_type}, title_en={title_en}, speaker={speaker_name}, date={date_val}, time={time_val}, location_en={location_en}, desc_en={desc_en}")
 
-# ─── DETERMINE TEMPLATE & OUTPUT DIR
+# ─── DETERMINE TEMPLATE & OUTPUT DIR & OUTPUT DIR
 is_event = bool(event_type)
 template_path = f"events/{event_type}.md.j2" if is_event else "news.md.j2"
 out_subdir = 'events' if is_event else 'news'
