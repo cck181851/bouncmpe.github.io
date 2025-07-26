@@ -1,8 +1,9 @@
 {% extends "_base.md.j2" %}
 
 {% block front_matter %}
-event_type: "seminar"
-speaker: "{{ name }}"
+event_type: "{{ event_type }}"
+datetime: "{{ datetime }}"
+speaker: "{{ speaker }}"
 duration: "{{ duration }}"
 location: "{{ location }}"
 {% endblock %}
