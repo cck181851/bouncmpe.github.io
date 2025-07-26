@@ -24,14 +24,14 @@ issue = repo.get_issue(number=ISSUE_NUMBER)
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
-    # GitHub Issue Forms include a hidden JSON comment with field IDs and values
+    # GitHub Issue Forms embed a JSON blob inside an HTML comment
     json_match = re.search(r"<!--\s*({.*})\s*-->", body, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group(1))
         except json.JSONDecodeError:
             pass
-    # Fallback: parse headings
+    # Fallback to markdown headings parsing
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
@@ -40,7 +40,7 @@ def parse_fields(body: str):
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
-    # Remap common variations
+    # Remap date field if needed
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
     return parsed
@@ -48,11 +48,13 @@ def parse_fields(body: str):
 fields = parse_fields(issue.body)
 
 # ─── DETERMINE TEMPLATE
-is_event = 'event_type' in fields and fields['event_type']
+is_event = bool(fields.get('event_type'))
 if is_event:
     template_path = f"events/{fields['event_type']}.md.j2"
+    out_subdir = 'events'
 else:
     template_path = "news.md.j2"
+    out_subdir = 'news'
 
 # ─── SLUGIFY UTILITY
 def slugify(text: str) -> str:
@@ -77,8 +79,61 @@ def download_image(md_input: str) -> str:
         f.write(resp.content)
     return f"uploads/{filename}"
 
-# detect image field by original ID
 img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
 
 # ─── BUILD CONTEXT
+ctx = {
+    'title': fields.get('title_en', issue.title),
+    'date': fields.get('date', ''),
+    'thumbnail': thumbnail
+}
+if is_event:
+    ctx.update({
+        'description': fields.get('description_en', ''),
+        'name': fields.get('name', ''),
+        'duration': fields.get('duration', ''),
+        'location': fields.get('location_en', '')
+    })
+else:
+    ctx.update({
+        'description': fields.get('short_description_en', ''),
+        'content': fields.get('full_content_en', '')
+    })
+
+# ─── RENDER & WRITE FILES ──────────────────────────────────────────────────────
+env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
+tmpl = env.get_template(template_path)
+
+slug_base = slugify(ctx['title'])
+out_dir = os.path.join('content', out_subdir, f"{ctx['date']}-{slug_base}")
+
+os.makedirs(out_dir, exist_ok=True)
+
+# Render English version
+out_path_en = os.path.join(out_dir, 'index.en.md')
+with open(out_path_en, 'w', encoding='utf-8') as f:
+    f.write(tmpl.render(**ctx))
+
+# Render Turkish version (swap keys)
+if is_event:
+    ctx_tr = {
+        'title': fields.get('title_tr', ''),
+        'date': ctx['date'],
+        'thumbnail': thumbnail,
+        'description': fields.get('description_tr', ''),
+        'name': fields.get('name', ''),
+        'duration': ctx['duration'],
+        'location': fields.get('location_tr', '')
+    }
+else:
+    ctx_tr = {
+        'title': fields.get('title_tr', ''),
+        'date': ctx['date'],
+        'thumbnail': thumbnail,
+        'description': fields.get('short_description_tr', ''),
+        'content': fields.get('full_content_tr', '')
+    }
+out_path_tr = os.path.join(out_dir, 'index.tr.md')
+with open(out_path_tr, 'w', encoding='utf-8') as f:
+    f.write(tmpl.render(**ctx_tr))
