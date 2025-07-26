@@ -41,24 +41,60 @@ def parse_fields(body: str):
     )
     parsed = {}
     for label, val in pattern.findall(body or ""):
+        # normalize keys: lowercase, underscores
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
-    print(f"[DEBUG] Fallback parsed fields: {parsed}")
-    # Remap date field if needed
+    # remap date field
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
+    print(f"[DEBUG] Fallback parsed fields: {parsed}")
     return parsed
 
 fields = parse_fields(issue.body)
 
-# Debug all fields
-print(f"[DEBUG] fields dict keys: {list(fields.keys())}")
+# ─── NORMALIZE FIELD KEYS FOR SIMPLER ACCESS ──────────────────────────────────
+# Map form-specific keys to uniform names
+key_map = {
+    'event_title__en': 'title_en',
+    'title_en': 'title_en',
+    'event_title__tr': 'title_tr',
+    'title_tr': 'title_tr',
+    'description__en': 'description_en',
+    'short_description__en': 'description_en',
+    'description__tr': 'description_tr',
+    'short_description__tr': 'description_tr',
+    'full_content__en': 'content_en',
+    'full_content__tr': 'content_tr',
+    'speaker_presenter_name': 'name',
+    'date': 'date',
+    'time': 'time',
+    'duration': 'duration',
+    'location__en': 'location_en',
+    'location__tr': 'location_tr',
+    'image__optional__drag___drop': 'image_markdown',
+    'image_markdown': 'image_markdown'
+}
+# Build a normalized dict
+normalized = {}
+for raw, val in fields.items():
+    if raw in key_map and val:
+        normalized[key_map[raw]] = val
+print(f"[DEBUG] Normalized fields: {normalized}")
+# Use normalized dict onward
+fields = normalized
+print(f"[DEBUG] Fields dict keys after normalization: {list(fields.keys())}")
 
 # ─── DETERMINE TEMPLATE
-is_event = bool(fields.get('event_type'))
-template_path = f"events/{fields['event_type']}.md.j2" if is_event else "news.md.j2"
+is_event = 'event_type' in fields or 'event_type' in fields
+# event_type still from fallback, so pull raw
+event_type = fields.get('event_type') or fields.get('event_type')
+if event_type:
+    template_path = f"events/{event_type}.md.j2"
+    out_subdir = 'events'
+else:
+    template_path = "news.md.j2"
+    out_subdir = 'news'
 print(f"[DEBUG] Using template: {template_path}")
-out_subdir = 'events' if is_event else 'news'
 
 # ─── SLUGIFY UTILITY
 def slugify(text: str) -> str:
@@ -68,7 +104,7 @@ def slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "-", text).strip("-_")
 
 # ─── IMAGE DOWNLOAD
-def download_image(md_input: str) -> str:
+ def download_image(md_input: str) -> str:
     print(f"[DEBUG] Raw image markdown input: {md_input}")
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
     if not m:
@@ -87,6 +123,7 @@ def download_image(md_input: str) -> str:
     print(f"[DEBUG] Saved image to: {path}")
     return f"uploads/{filename}"
 
+# get image field dynamically
 img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
 print(f"[DEBUG] thumbnail path: {thumbnail}")
@@ -102,8 +139,7 @@ ctx = {
     'date': date_val,
     'thumbnail': thumbnail,
 }
-
-if is_event:
+if out_subdir == 'events':
     ctx.update({
         'datetime': datetime_iso,
         'description': fields.get('description_en', ''),
@@ -113,8 +149,8 @@ if is_event:
     })
 else:
     ctx.update({
-        'description': fields.get('short_description_en', ''),
-        'content': fields.get('full_content_en', ''),
+        'description': fields.get('description_en', ''),
+        'content': fields.get('content_en', ''),
     })
 print(f"[DEBUG] Final context for template rendering: {ctx}")
 
@@ -135,8 +171,8 @@ with open(out_path_en, 'w', encoding='utf-8') as f:
     f.write(en_out)
 print(f"[DEBUG] Wrote English markdown: {out_path_en}")
 
-# Render Turkish version (swap language-specific fields)
-if is_event:
+# Render Turkish version
+if out_subdir == 'events':
     tr_ctx = {
         'title': fields.get('title_tr', ''),
         'date': date_val,
@@ -152,8 +188,8 @@ else:
         'title': fields.get('title_tr', ''),
         'date': date_val,
         'thumbnail': thumbnail,
-        'description': fields.get('short_description_tr', ''),
-        'content': fields.get('full_content_tr', ''),
+        'description': fields.get('description_tr', ''),
+        'content': fields.get('content_tr', ''),
     }
 print(f"[DEBUG] Turkish context: {tr_ctx}")
 tr_out = tmpl.render(**tr_ctx)
