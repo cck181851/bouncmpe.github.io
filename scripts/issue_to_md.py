@@ -18,6 +18,7 @@ UPLOADS_DIR   = os.path.join("static", "uploads")
 if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
     raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set")
 
+# GitHub client
 gh    = Github(GITHUB_TOKEN)
 repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
@@ -25,81 +26,89 @@ print(f"[DEBUG] Loaded Issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
-    json_match = re.search(r"<!--\s*({.*})\s*-->", body or "", re.DOTALL)
-    if json_match:
+    # Try the JSON blob that GitHub Forms embeds
+    m = re.search(r"<!--\s*({.*})\s*-->", body or "", re.DOTALL)
+    if m:
         try:
-            return json.loads(json_match.group(1))
-        except json.JSONDecodeError:
-            pass
-    pattern = re.compile(
-        r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
-        re.MULTILINE | re.DOTALL
-    )
+            data = json.loads(m.group(1))
+            print("[DEBUG] Parsed JSON form data:", data)
+            return data
+        except json.JSONDecodeError as e:
+            print("[DEBUG] JSON parse error:", e)
+    # Fallback to markdown headings
+    pattern = re.compile(r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)", re.MULTILINE | re.DOTALL)
     parsed = {}
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
+    print("[DEBUG] Fallback parsed fields:", parsed)
     return parsed
 
 fields = parse_fields(issue.body)
 
-def get_field(variants, default=""):
-    for name in variants:
-        if name in fields and fields[name]:
-            return fields[name]
+# ─── HELPER ───────────────────────────────────────────────────────────────────
+def get_field(keys, default=""):
+    for k in keys:
+        if k in fields and fields[k]:
+            return fields[k]
     return default
 
-# ─── EXTRACT VARIABLES ─────────────────────────────────────────────────────────
+# ─── EXTRACT COMMON FIELDS ────────────────────────────────────────────────────
 event_type   = get_field(['event_type'], '')
 title_en     = get_field(['title_en','event_title__en'], issue.title)
 title_tr     = get_field(['title_tr','event_title__tr'], '')
 date_val     = get_field(['date'], '')
 time_val     = get_field(['time'], '')
 duration     = get_field(['duration'], '')
-speaker_name = get_field(['name','speaker_presenter_name'], '')
-location_en  = get_field(['location_en','location__en'], '')
-location_tr  = get_field(['location_tr','location__tr'], '')
-desc_en      = get_field(['description_en','short_description_en','description__en'], '')
-desc_tr      = get_field(['description_tr','short_description_tr','description__tr'], '')
-image_md     = get_field(['image_markdown','image__optional__drag___drop'], '')
 
-# ─── DOWNLOAD IMAGE WITH EXTENSION DETECTION ──────────────────────────────────
-def download_image(input_str: str) -> str:
-    # find Markdown or HTML image
-    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str) \
-        or re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
+# ─── EXTRACT NEWS‐SPECIFIC FIELDS ─────────────────────────────────────────────
+# description = “Short Description (EN)” in the form
+desc_en = get_field([
+    'description_en',
+    'short_description_en',
+    'short_description__en',
+    'description__en'
+], '')
+# full content = “Full Content (EN)” in the form
+content_en = get_field([
+    'content_en',
+    'full_content_en',
+    'full_content__en'
+], '')
+# image markdown
+image_md  = get_field([
+    'image_markdown',
+], '')
+
+print(f"[DEBUG] News: desc_en={desc_en!r}, content_en={content_en!r}, image_md={image_md!r}")
+
+# ─── IMAGE DOWNLOAD (with extension) ───────────────────────────────────────────
+def download_image(md: str) -> str:
+    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md) \
+        or re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", md)
     if not m:
         return ""
     url = m.group(1)
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
-
-    # Determine extension from content-type
-    content_type = resp.headers.get('Content-Type', '')
-    ext = mimetypes.guess_extension(content_type.split(';')[0].strip()) or \
-          os.path.splitext(url)[1] or '.png'
-
+    r   = requests.get(url, timeout=15)
+    r.raise_for_status()
+    ext = mimetypes.guess_extension(r.headers.get('Content-Type','').split(';')[0]) \
+          or os.path.splitext(url)[1] or '.png'
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    # use a safe filename + extension
     base = os.path.basename(url).split('?')[0]
-    name = os.path.splitext(base)[0]
-    filename = f"{name}{ext}"
-    dest = os.path.join(UPLOADS_DIR, filename)
-
-    with open(dest, "wb") as f:
-        f.write(resp.content)
-    print(f"[DEBUG] Saved image to {dest} (Content-Type: {content_type})")
-
-    # Hugo will serve under /uploads/
-    return f"/uploads/{filename}"
+    name = os.path.splitext(base)[0] + ext
+    dest = os.path.join(UPLOADS_DIR, name)
+    with open(dest, 'wb') as f:
+        f.write(r.content)
+    print(f"[DEBUG] Saved image to {dest}")
+    return f"/uploads/{name}"
 
 thumbnail = download_image(image_md)
 
 # ─── BUILD CONTEXT & RENDER ───────────────────────────────────────────────────
 datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
-ctx_common = {
+ctx_common   = {
     'title':     title_en,
     'date':      date_val,
     'time':      time_val,
@@ -107,32 +116,35 @@ ctx_common = {
 }
 
 if event_type:
-    ctx_en = {
-        **ctx_common,
-        'event_type': event_type,
-        'speaker':    speaker_name,
-        'duration':   duration,
-        'location':   location_en,
-        'datetime':   datetime_iso,
-        'description': desc_en,
-    }
-    template_path = f"events/{event_type}.md.j2"
+    # … your event logic …
+    pass
 else:
-    content_en = get_field(['content_en'], '')
-    ctx_en = { **ctx_common, 'description': desc_en, 'content': content_en }
+    # NEWS
+    ctx_en       = { **ctx_common, 'description': desc_en, 'content': content_en }
     template_path = "news.md.j2"
 
+# Turkish version (similarly)
 ctx_tr = ctx_en.copy()
-ctx_tr.update({'title': title_tr or title_en, 'description': desc_tr or desc_en})
+ctx_tr.update({
+    'title': title_tr or title_en,
+    'description': get_field([
+        'description_tr','short_description_tr','description__tr'
+    ], ''),
+    'content':     get_field([
+        'content_tr','full_content_tr','content__tr','full_content__tr'
+    ], '')
+})
 
+# Render with Jinja
 env  = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
+# Slugify
 slug = unicodedata.normalize("NFKD", title_en).encode("ascii","ignore").decode().lower()
 slug = re.sub(r"[^\w\s-]","", slug)
 slug = re.sub(r"[-\s]+","-", slug)
 
-out_dir = os.path.join("content", "events" if event_type else "news", f"{date_val}-{slug}")
+out_dir = os.path.join("content", "news", f"{date_val}-{slug}")
 os.makedirs(out_dir, exist_ok=True)
 
 for lang, ctx, fname in [("en", ctx_en, "index.en.md"), ("tr", ctx_tr, "index.tr.md")]:
@@ -140,5 +152,4 @@ for lang, ctx, fname in [("en", ctx_en, "index.en.md"), ("tr", ctx_tr, "index.tr
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
     print(f"[DEBUG] Wrote {lang} → {path}")
-
 
