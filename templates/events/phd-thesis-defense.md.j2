@@ -2,12 +2,15 @@
 
 {% block front_matter %}
 event_type: "{{ event_type }}"
-datetime: "{{ datetime }}"
-speaker: "{{ speaker }}"
-duration: "{{ duration }}"
-location: "{{ location }}"
 {% endblock %}
 
 {% block content %}
+![{{ title }}]({{ thumbnail }})
+
+**Speaker:** {{ speaker }}  
+**Duration:** {{ duration }}  
+**Location:** {{ location }}  
+**Date & Time:** {{ date }} at {{ time }}
+
 {{ description }}
 {% endblock %}
