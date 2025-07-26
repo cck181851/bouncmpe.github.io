@@ -49,50 +49,28 @@ def parse_fields(body: str):
     return parsed
 
 fields = parse_fields(issue.body)
+print(f"[DEBUG] Fields after parse: {fields}")
 
 # ─── EXTRACT VARIABLES ─────────────────────────────────────────────────────────
-# Support both JSON field IDs (from issue form) and fallback heading keys
 event_type      = fields.get('event_type', '')
-# Title: JSON uses title_en/title_tr, fallback uses event_title__en/event_title__tr
 title_en        = fields.get('title_en') or fields.get('event_title__en') or issue.title
 title_tr        = fields.get('title_tr') or fields.get('event_title__tr') or ''
-# Date & Time
 date_val        = fields.get('date', '')
 time_val        = fields.get('time', '')
-# Duration
 duration        = fields.get('duration', '')
-# Speaker: JSON key 'name', fallback key 'speaker_presenter_name'
+# Speaker from JSON key or fallback label in headings
 speaker_name    = fields.get('name') or fields.get('speaker_presenter_name', '')
-# Location: JSON uses location_en/location_tr, fallback uses those keys as well
 location_en     = fields.get('location_en') or fields.get('location__en', '')
 location_tr     = fields.get('location_tr') or fields.get('location__tr', '')
-# Description: JSON uses description_en/description_tr, fallback uses description__en/_tr or short_description variants
 desc_en         = fields.get('description_en') or fields.get('short_description_en') or fields.get('description__en') or fields.get('short_description__en', '')
 desc_tr         = fields.get('description_tr') or fields.get('short_description_tr') or fields.get('description__tr') or fields.get('short_description__tr', '')
-# Image: JSON key 'image_markdown', fallback image__optional... key
 image_md        = fields.get('image_markdown') or fields.get('image__optional__drag___drop', '')
-print(f"[DEBUG] Variables: event_type={event_type}, title_en={title_en}, speaker={speaker_name}, date={date_val}, time={time_val}, location_en={location_en}, desc_en={desc_en}")
+print(f"[DEBUG] Extracted: name={speaker_name}, img_md={image_md}, time={time_val}")
 
-# ─── DETERMINE TEMPLATE & OUTPUT DIR & OUTPUT DIR
-is_event = bool(event_type)
-template_path = f"events/{event_type}.md.j2" if is_event else "news.md.j2"
-out_subdir = 'events' if is_event else 'news'
-print(f"[DEBUG] Using template: {template_path}")
-
-# ─── SLUGIFY UTILITY
-def slugify(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    text = text.encode("ascii", "ignore").decode("ascii")
-    text = re.sub(r"[^\w\s-]", "", text.lower())
-    return re.sub(r"[-\s]+", "-", text).strip("-_")
-
-# ─── IMAGE DOWNLOAD (supports markdown and HTML)
-
+# ─── DOWNLOAD IMAGE ───────────────────────────────────────────────────────────
 def download_image(input_str: str) -> str:
     print(f"[DEBUG] Raw image input: {input_str}")
-    # markdown image
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str)
-    # html <img src="..."
     if not m:
         m = re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
     if not m:
@@ -114,47 +92,31 @@ def download_image(input_str: str) -> str:
 thumbnail = download_image(image_md)
 print(f"[DEBUG] thumbnail path: {thumbnail}")
 
-# ─── BUILD CONTEXTS
-# Combine date and time for events
+# ─── BUILD CONTEXTS & OUTPUT ─────────────────────────────────────────────────
 datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
 
 ctx_en = {
     'title': title_en,
     'date': date_val,
     'thumbnail': thumbnail,
+    'event_type': event_type,
+    'speaker': speaker_name,
+    'duration': duration,
+    'location': location_en,
+    'datetime': datetime_iso,
+    'description': desc_en
 }
 ctx_tr = {
     'title': title_tr,
     'date': date_val,
     'thumbnail': thumbnail,
+    'event_type': event_type,
+    'speaker': speaker_name,
+    'duration': duration,
+    'location': location_tr,
+    'datetime': datetime_iso,
+    'description': desc_tr
 }
-
-if is_event:
-    ctx_en.update({
-        'event_type': event_type,
-        'speaker': speaker_name,
-        'duration': duration,
-        'location': location_en,
-        'datetime': datetime_iso,
-        'description': desc_en
-    })
-    ctx_tr.update({
-        'event_type': event_type,
-        'speaker': speaker_name,
-        'duration': duration,
-        'location': location_tr,
-        'datetime': datetime_iso,
-        'description': desc_tr
-    })
-else:
-    ctx_en.update({
-        'description': desc_en,
-        'content': fields.get('content__en', '')
-    })
-    ctx_tr.update({
-        'description': desc_tr,
-        'content': fields.get('content__tr', '')
-    })
 
 print(f"[DEBUG] ctx_en: {ctx_en}")
 print(f"[DEBUG] ctx_tr: {ctx_tr}")
@@ -163,8 +125,9 @@ print(f"[DEBUG] ctx_tr: {ctx_tr}")
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
-slug_base = slugify(title_en)
-out_dir = os.path.join('content', out_subdir, f"{date_val}-{slug_base}")
+slug_base = re.sub(r"[^\w\s-]", "", title_en.lower())
+slug_base = re.sub(r"[-\s]+", "-", slug_base).strip("-_ ")
+out_dir = os.path.join('content', 'events' if event_type else 'news', f"{date_val}-{slug_base}")
 print(f"[DEBUG] Output directory: {out_dir}")
 
 os.makedirs(out_dir, exist_ok=True)
