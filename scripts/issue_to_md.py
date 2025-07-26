@@ -25,14 +25,14 @@ print(f"[DEBUG] Loaded Issue #{ISSUE_NUMBER}: {issue.title!r}")
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
-    # Try JSON blob
+    # Try embedded JSON (Issue Forms)
     json_match = re.search(r"<!--\s*({.*})\s*-->", body or "", re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group(1))
         except json.JSONDecodeError:
             pass
-    # Fallback: markdown headings
+    # Fallback: parse headings
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
@@ -41,7 +41,7 @@ def parse_fields(body: str):
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
-    # Remap date field
+    # normalize date field key
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
     return parsed
@@ -71,9 +71,11 @@ image_md     = get_field(['image_markdown', 'image__optional__drag___drop'], '')
 
 # ─── DOWNLOAD IMAGE ────────────────────────────────────────────────────────────
 def download_image(input_str: str) -> str:
-    # Match Markdown ![]() or HTML <img>
-    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str) \
-        or re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
+    # Try Markdown syntax
+    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str)
+    # Fallback to HTML <img>
+    if not m:
+        m = re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
     if not m:
         return ""
     url = m.group(1)
@@ -84,7 +86,7 @@ def download_image(input_str: str) -> str:
     dest = os.path.join(UPLOADS_DIR, filename)
     with open(dest, "wb") as f:
         f.write(resp.content)
-    # return a path Hugo will serve
+    # return the served path for Hugo
     return f"/uploads/{filename}"
 
 thumbnail = download_image(image_md)
@@ -99,7 +101,7 @@ ctx_common = {
 }
 
 if event_type:
-    # EVENT
+    # EVENT context
     ctx_en = {
         **ctx_common,
         'event_type': event_type,
@@ -111,31 +113,30 @@ if event_type:
     }
     template_path = f"events/{event_type}.md.j2"
 else:
-    # NEWS
+    # NEWS context
     content_en = get_field(['content_en'], '')
     ctx_en = { **ctx_common, 'description': desc_en, 'content': content_en }
     template_path = "news.md.j2"
 
-# Turkish
+# Turkish context
 ctx_tr = ctx_en.copy()
 ctx_tr.update({'title': title_tr or title_en, 'description': desc_tr or desc_en})
 
-# Load template
+# Render
 env  = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
-# Slugify
+# Slugify title
 slug = unicodedata.normalize("NFKD", title_en).encode("ascii","ignore").decode().lower()
 slug = re.sub(r"[^\w\s-]","", slug)
 slug = re.sub(r"[-\s]+","-", slug)
 
-# Output directories
 out_dir = os.path.join("content", "events" if event_type else "news", f"{date_val}-{slug}")
 os.makedirs(out_dir, exist_ok=True)
 
-# Write files
 for lang, ctx, fname in [("en", ctx_en, "index.en.md"), ("tr", ctx_tr, "index.tr.md")]:
     path = os.path.join(out_dir, fname)
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
     print(f"[DEBUG] Wrote {lang} → {path}")
+
