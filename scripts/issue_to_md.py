@@ -83,22 +83,29 @@ img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
 
 # ─── BUILD CONTEXT
+# Combine date and time into ISO datetime for events
+date_val = fields.get('date', '')
+time_val = fields.get('time', '')
+datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
+
 ctx = {
     'title': fields.get('title_en', issue.title),
-    'date': fields.get('date', ''),
-    'thumbnail': thumbnail
+    'date': date_val,
+    'thumbnail': thumbnail,
 }
+
 if is_event:
     ctx.update({
+        'datetime': datetime_iso,
         'description': fields.get('description_en', ''),
         'name': fields.get('name', ''),
         'duration': fields.get('duration', ''),
-        'location': fields.get('location_en', '')
+        'location': fields.get('location_en', ''),
     })
 else:
     ctx.update({
         'description': fields.get('short_description_en', ''),
-        'content': fields.get('full_content_en', '')
+        'content': fields.get('full_content_en', ''),
     })
 
 # ─── RENDER & WRITE FILES ──────────────────────────────────────────────────────
@@ -111,29 +118,32 @@ out_dir = os.path.join('content', out_subdir, f"{ctx['date']}-{slug_base}")
 os.makedirs(out_dir, exist_ok=True)
 
 # Render English version
+en_out = tmpl.render(**ctx)
 out_path_en = os.path.join(out_dir, 'index.en.md')
 with open(out_path_en, 'w', encoding='utf-8') as f:
-    f.write(tmpl.render(**ctx))
+    f.write(en_out)
 
-# Render Turkish version (swap keys)
+# Render Turkish version (swap language-specific fields)
 if is_event:
-    ctx_tr = {
+    tr_ctx = {
         'title': fields.get('title_tr', ''),
-        'date': ctx['date'],
+        'date': date_val,
         'thumbnail': thumbnail,
+        'datetime': datetime_iso,
         'description': fields.get('description_tr', ''),
         'name': fields.get('name', ''),
-        'duration': ctx['duration'],
-        'location': fields.get('location_tr', '')
+        'duration': fields.get('duration', ''),
+        'location': fields.get('location_tr', ''),
     }
 else:
-    ctx_tr = {
+    tr_ctx = {
         'title': fields.get('title_tr', ''),
-        'date': ctx['date'],
+        'date': date_val,
         'thumbnail': thumbnail,
         'description': fields.get('short_description_tr', ''),
-        'content': fields.get('full_content_tr', '')
+        'content': fields.get('full_content_tr', ''),
     }
+tr_out = tmpl.render(**tr_ctx)
 out_path_tr = os.path.join(out_dir, 'index.tr.md')
 with open(out_path_tr, 'w', encoding='utf-8') as f:
-    f.write(tmpl.render(**ctx_tr))
+    f.write(tr_out)
