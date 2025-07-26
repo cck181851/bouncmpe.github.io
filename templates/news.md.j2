@@ -5,7 +5,9 @@ description: "{{ description }}"
 {% endblock %}
 
 {% block content %}
+{% if thumbnail %}
 ![{{ title }}]({{ thumbnail }})
+{% endif %}
 
 {{ content }}
 {% endblock %}
