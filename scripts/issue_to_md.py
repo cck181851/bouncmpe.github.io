@@ -1,167 +1,163 @@
+#!/usr/bin/env python3
 import os
 import re
-import sys
+import unicodedata
+import json
 import requests
 from github import Github
 from jinja2 import Environment, FileSystemLoader
-from datetime import datetime
 
-# Constants
-TEMPLATE_DIR = "templates"
-OUTPUT_DIR = "content"
-ASSETS_DIR = "assets/uploads"
+# ─── CONFIG ───────────────────────────────────────────────────────────────────
+REPO_NAME     = os.getenv("GITHUB_REPOSITORY")
+ISSUE_NUMBER  = int(os.getenv("ISSUE_NUMBER", "0"))
+GITHUB_TOKEN  = os.getenv("GITHUB_TOKEN")
+TEMPLATES_DIR = "templates"
+UPLOADS_DIR   = os.path.join("assets", "uploads")
 
-# Setup Jinja2
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
+    raise RuntimeError("GITHUB_TOKEN and ISSUE_NUMBER must be set")
 
-# Get GitHub token from env
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO_NAME = os.getenv("GITHUB_REPOSITORY")
-ISSUE_NUMBER = int(os.getenv("ISSUE_NUMBER", "0"))
-
-if not GITHUB_TOKEN or not REPO_NAME or not ISSUE_NUMBER:
-    print("Missing environment variables.")
-    sys.exit(1)
-
-gh = Github(GITHUB_TOKEN)
-repo = gh.get_repo(REPO_NAME)
+# Initialize GitHub client and issue
+gh    = Github(GITHUB_TOKEN)
+repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
+print(f"[DEBUG] Issue #{ISSUE_NUMBER}: title={issue.title}")
 
-print(f"[DEBUG] Issue #{issue.number}: title={issue.title}")
-
-# Parse body
-def parse_issue_body(body):
-    fields = {}
-    fallback = {}
-
-    # Attempt fallback parsing from markdown
-    current_key = None
-    for line in body.splitlines():
-        if line.startswith("### "):
-            current_key = line.strip("# ").strip().lower().replace(" ", "_")
-        elif current_key and line.strip():
-            fallback[current_key] = line.strip()
-
-    # Attempt extracting from GitHub Issue Form
-    match = re.search(r"```json\s+(.*?)\s+```", body, re.DOTALL)
-    if match:
-        import json
+# ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
+def parse_fields(body: str):
+    # Try to extract the JSON blob GitHub Issue Forms embed
+    json_match = re.search(r"<!--\s*({.*})\s*-->", body, re.DOTALL)
+    if json_match:
         try:
-            fields = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            print("[DEBUG] Failed to parse JSON block.")
-            fields = {}
-    
-    fields = fields or fallback
-    print(f"[DEBUG] Fallback parsed fields: {fallback}")
-    print(f"[DEBUG] Fields after parse: {fields}")
-    return fields
+            data = json.loads(json_match.group(1))
+            print(f"[DEBUG] Parsed JSON fields: {data}")
+            return data
+        except json.JSONDecodeError as e:
+            print(f"[WARN] JSON parse error: {e}")
+    # Fallback: parse markdown headings
+    pattern = re.compile(
+        r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
+        re.MULTILINE | re.DOTALL
+    )
+    parsed = {}
+    for label, val in pattern.findall(body or ""):
+        key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
+        parsed[key] = val.strip()
+    # Remap the date label from "(YYYY-MM-DD)" if present
+    if 'date__yyyy_mm_dd' in parsed:
+        parsed['date'] = parsed.pop('date__yyyy_mm_dd')
+    print(f"[DEBUG] Fallback parsed fields: {parsed}")
+    return parsed
 
-fields = parse_issue_body(issue.body)
+fields = parse_fields(issue.body)
+print(f"[DEBUG] Fields after parse: {fields}")
 
-# Extract info
-title_en = fields.get("event_title__en", issue.title)
-title_tr = fields.get("event_title__tr", "")
-description_en = fields.get("description__en", "")
-description_tr = fields.get("description__tr", "")
-speaker_name = fields.get("speaker_presenter_name", fields.get("name", ""))
-duration = fields.get("duration", "")
-location_en = fields.get("location__en", "")
-location_tr = fields.get("location__tr", "")
-image_md = fields.get("image__optional__drag___drop", "")
-time_val = fields.get("time", "")
-date_val = fields.get("date__yyyy_mm_dd", fields.get("date", ""))
-event_type = fields.get("event_type", "other")
+# ─── EXTRACT VARIABLES ─────────────────────────────────────────────────────────
+event_type   = fields.get('event_type', '')
+title_en     = fields.get('title_en') or fields.get('event_title__en') or issue.title
+title_tr     = fields.get('title_tr') or fields.get('event_title__tr') or ''
+date_val     = fields.get('date', '')
+time_val     = fields.get('time', '')
+duration     = fields.get('duration', '')
+# Speaker: JSON key 'name', fallback key 'speaker_presenter_name'
+speaker_name = fields.get('name') or fields.get('speaker_presenter_name', '')
+location_en  = fields.get('location_en') or fields.get('location__en', '')
+location_tr  = fields.get('location_tr') or fields.get('location__tr', '')
+# Description: JSON vs. fallback keys
+desc_en      = (fields.get('description_en')
+               or fields.get('short_description_en')
+               or fields.get('description__en')
+               or fields.get('short_description__en', ''))
+desc_tr      = (fields.get('description_tr')
+               or fields.get('short_description_tr')
+               or fields.get('description__tr')
+               or fields.get('short_description__tr', ''))
+# Image: JSON vs. fallback
+image_md     = fields.get('image_markdown') or fields.get('image__optional__drag___drop', '')
+print(f"[DEBUG] Extracted variables → speaker: {speaker_name}, image_md: {image_md}, time: {time_val}")
 
-print(f"[DEBUG] Extracted: name={speaker_name}, img_md={image_md}, time={time_val}")
-print(f"[DEBUG] Raw image input: {image_md}")
-
-# Combine date + time
-datetime_val = ""
-if date_val and time_val:
-    datetime_val = f"{date_val}T{time_val}"
-elif date_val:
-    datetime_val = date_val
-
-# Handle image download
-def download_image(md_input: str) -> str:
-    match = re.search(r'src="([^"]+)"', md_input)
-    if not match:
+# ─── DOWNLOAD IMAGE (Markdown or HTML) ────────────────────────────────────────
+def download_image(input_str: str) -> str:
+    print(f"[DEBUG] Raw image input: {input_str}")
+    # Try Markdown-style
+    m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", input_str)
+    # Fallback to HTML <img src="...">
+    if not m:
+        m = re.search(r"<img[^>]+src=\"(https?://[^\"]+)\"", input_str)
+    if not m:
+        print("[DEBUG] No image URL found")
         return ""
-    url = match.group(1)
+    url = m.group(1)
     print(f"[DEBUG] Downloading image URL: {url}")
-    os.makedirs(ASSETS_DIR, exist_ok=True)
-    filename = url.split("/")[-1]
-    path = os.path.join(ASSETS_DIR, filename)
+    resp = requests.get(url, timeout=15)
+    resp.raise_for_status()
+    # Choose extension
+    ext = os.path.splitext(url)[1] or ".png"
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    filename = os.path.basename(url.split("?", 1)[0])
+    path = os.path.join(UPLOADS_DIR, filename)
+    with open(path, "wb") as f:
+        f.write(resp.content)
+    print(f"[DEBUG] Saved image to: {path}")
+    return f"uploads/{filename}"
 
-    try:
-        r = requests.get(url)
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            f.write(r.content)
-        print(f"[DEBUG] Saved image to: {path}")
-        return f"/{ASSETS_DIR}/{filename}"
-    except Exception as e:
-        print(f"[ERROR] Image download failed: {e}")
-        return ""
+thumbnail = download_image(image_md)
+print(f"[DEBUG] thumbnail path: {thumbnail}")
 
-thumbnail_path = download_image(image_md)
-print(f"[DEBUG] thumbnail path: {thumbnail_path}")
+# ─── BUILD CONTEXTS & OUTPUT ─────────────────────────────────────────────────
+# Combine date + time for events
+datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
 
-# Slug
-slug = title_en.lower().replace(" ", "-").replace(".", "").replace(",", "")
-output_path = os.path.join(OUTPUT_DIR, "events", f"{date_val}-{slug}")
-os.makedirs(output_path, exist_ok=True)
-
-# Select template
-template_path = f"events/{event_type}.md.j2"
-try:
-    tmpl = env.get_template(template_path)
-except Exception as e:
-    print(f"[ERROR] Template load failed: {e}")
-    sys.exit(1)
-
-# Prepare context
 ctx_en = {
-    "title": title_en,
-    "date": date_val,
-    "thumbnail": thumbnail_path,
-    "event_type": event_type,
-    "speaker": speaker_name,
-    "duration": duration,
-    "location": location_en,
-    "datetime": datetime_val,
-    "description": description_en,
+    'title':     title_en,
+    'date':      date_val,
+    'thumbnail': thumbnail,
+    'event_type': event_type,
+    'speaker':   speaker_name,
+    'duration':  duration,
+    'location':  location_en,
+    'datetime':  datetime_iso,
+    'description': desc_en
 }
 ctx_tr = {
-    "title": title_tr,
-    "date": date_val,
-    "thumbnail": thumbnail_path,
-    "event_type": event_type,
-    "speaker": speaker_name,
-    "duration": duration,
-    "location": location_tr,
-    "datetime": datetime_val,
-    "description": description_tr,
+    'title':     title_tr,
+    'date':      date_val,
+    'thumbnail': thumbnail,
+    'event_type': event_type,
+    'speaker':   speaker_name,
+    'duration':  duration,
+    'location':  location_tr,
+    'datetime':  datetime_iso,
+    'description': desc_tr
 }
-
 print(f"[DEBUG] ctx_en: {ctx_en}")
 print(f"[DEBUG] ctx_tr: {ctx_tr}")
 
-# Render and write
-out_path_en = os.path.join(output_path, "index.en.md")
-out_path_tr = os.path.join(output_path, "index.tr.md")
+# ─── RENDER & WRITE FILES ──────────────────────────────────────────────────────
+env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
+template_path = f"events/{event_type}.md.j2" if event_type else "news.md.j2"
+tmpl = env.get_template(template_path)
+print(f"[DEBUG] Using template: {template_path}")
 
+# Generate slug
+slug = unicodedata.normalize("NFKD", title_en)
+slug = slug.encode("ascii", "ignore").decode("ascii")
+slug = re.sub(r"[^\w\s-]", "", slug.lower())
+slug = re.sub(r"[-\s]+", "-", slug).strip("-_")
+
+out_dir = os.path.join("content", "events" if event_type else "news", f"{date_val}-{slug}")
+print(f"[DEBUG] Output directory: {out_dir}")
+os.makedirs(out_dir, exist_ok=True)
+
+# English file
+out_path_en = os.path.join(out_dir, "index.en.md")
 with open(out_path_en, "w", encoding="utf-8") as f:
     f.write(tmpl.render(**ctx_en))
+print(f"[DEBUG] Wrote English markdown: {out_path_en}")
+
+# Turkish file
+out_path_tr = os.path.join(out_dir, "index.tr.md")
 with open(out_path_tr, "w", encoding="utf-8") as f:
     f.write(tmpl.render(**ctx_tr))
-
-# Print front-matter preview
-try:
-    with open(out_path_en, "r", encoding="utf-8") as f:
-        lines = [next(f) for _ in range(10)]
-        print("[DEBUG] Generated MD front-matter:\n" + "".join(lines))
-except Exception:
-    pass
+print(f"[DEBUG] Wrote Turkish markdown: {out_path_tr}")
 
