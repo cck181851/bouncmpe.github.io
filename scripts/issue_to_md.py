@@ -41,10 +41,8 @@ def parse_fields(body: str):
     )
     parsed = {}
     for label, val in pattern.findall(body or ""):
-        # normalize keys: lowercase, underscores
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
-    # remap date field
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
     print(f"[DEBUG] Fallback parsed fields: {parsed}")
@@ -53,8 +51,8 @@ def parse_fields(body: str):
 fields = parse_fields(issue.body)
 
 # ─── NORMALIZE FIELD KEYS FOR SIMPLER ACCESS ──────────────────────────────────
-# Map form-specific keys to uniform names
 key_map = {
+    'event_type': 'event_type',
     'event_title__en': 'title_en',
     'title_en': 'title_en',
     'event_title__tr': 'title_tr',
@@ -74,21 +72,17 @@ key_map = {
     'image__optional__drag___drop': 'image_markdown',
     'image_markdown': 'image_markdown'
 }
-# Build a normalized dict
 normalized = {}
 for raw, val in fields.items():
     if raw in key_map and val:
         normalized[key_map[raw]] = val
 print(f"[DEBUG] Normalized fields: {normalized}")
-# Use normalized dict onward
 fields = normalized
-print(f"[DEBUG] Fields dict keys after normalization: {list(fields.keys())}")
 
 # ─── DETERMINE TEMPLATE
-is_event = 'event_type' in fields or 'event_type' in fields
-# event_type still from fallback, so pull raw
-event_type = fields.get('event_type') or fields.get('event_type')
-if event_type:
+is_event = bool(fields.get('event_type'))
+event_type = fields.get('event_type')
+if is_event:
     template_path = f"events/{event_type}.md.j2"
     out_subdir = 'events'
 else:
@@ -104,7 +98,7 @@ def slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "-", text).strip("-_")
 
 # ─── IMAGE DOWNLOAD
- def download_image(md_input: str) -> str:
+def download_image(md_input: str) -> str:
     print(f"[DEBUG] Raw image markdown input: {md_input}")
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
     if not m:
@@ -123,7 +117,6 @@ def slugify(text: str) -> str:
     print(f"[DEBUG] Saved image to: {path}")
     return f"uploads/{filename}"
 
-# get image field dynamically
 img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
 print(f"[DEBUG] thumbnail path: {thumbnail}")
@@ -137,7 +130,7 @@ datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
 ctx = {
     'title': fields.get('title_en', issue.title),
     'date': date_val,
-    'thumbnail': thumbnail,
+    'thumbnail': thumbnail
 }
 if out_subdir == 'events':
     ctx.update({
@@ -145,12 +138,12 @@ if out_subdir == 'events':
         'description': fields.get('description_en', ''),
         'name': fields.get('name', ''),
         'duration': fields.get('duration', ''),
-        'location': fields.get('location_en', ''),
+        'location': fields.get('location_en', '')
     })
 else:
     ctx.update({
         'description': fields.get('description_en', ''),
-        'content': fields.get('content_en', ''),
+        'content': fields.get('content_en', '')
     })
 print(f"[DEBUG] Final context for template rendering: {ctx}")
 
@@ -181,7 +174,7 @@ if out_subdir == 'events':
         'description': fields.get('description_tr', ''),
         'name': fields.get('name', ''),
         'duration': fields.get('duration', ''),
-        'location': fields.get('location_tr', ''),
+        'location': fields.get('location_tr', '')
     }
 else:
     tr_ctx = {
@@ -189,7 +182,7 @@ else:
         'date': date_val,
         'thumbnail': thumbnail,
         'description': fields.get('description_tr', ''),
-        'content': fields.get('content_tr', ''),
+        'content': fields.get('content_tr', '')
     }
 print(f"[DEBUG] Turkish context: {tr_ctx}")
 tr_out = tmpl.render(**tr_ctx)
