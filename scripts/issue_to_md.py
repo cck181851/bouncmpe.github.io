@@ -50,7 +50,6 @@ def slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "-", text).strip("-_")
 
 # ─── IMAGE DOWNLOAD
-
 def download_image(md_input: str) -> str:
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
     if not m:
@@ -71,7 +70,6 @@ img_field = next((v for k, v in fields.items() if k.startswith("image")), "")
 thumbnail = download_image(img_field) if img_field else ""
 
 # ─── BUILD CONTEXT
-
 def build_context():
     base = {
         "title": fields.get("title_en", issue.title),
@@ -93,7 +91,6 @@ def build_context():
     return base
 
 # ─── RENDER & WRITE
-
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 ctx = build_context()
