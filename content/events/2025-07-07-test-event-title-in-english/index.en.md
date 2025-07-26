@@ -1,0 +1,14 @@
+---
+title: "Test Event Title in English"
+date: "2025-07-07"
+
+
+event_type: "phd-thesis-defense"
+speaker: "Elon Musk"
+duration: "1h"
+location: "Location in English"
+
+---
+
+
+Desc in EN
