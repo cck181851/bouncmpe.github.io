@@ -21,6 +21,7 @@ if not GITHUB_TOKEN or ISSUE_NUMBER == 0:
 gh    = Github(GITHUB_TOKEN)
 repo  = gh.get_repo(REPO_NAME)
 issue = repo.get_issue(number=ISSUE_NUMBER)
+print(f"[DEBUG] Issue #{ISSUE_NUMBER}: title={issue.title}")
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
@@ -28,9 +29,11 @@ def parse_fields(body: str):
     json_match = re.search(r"<!--\s*({.*})\s*-->", body, re.DOTALL)
     if json_match:
         try:
-            return json.loads(json_match.group(1))
-        except json.JSONDecodeError:
-            pass
+            data = json.loads(json_match.group(1))
+            print(f"[DEBUG] Parsed JSON fields: {data}")
+            return data
+        except json.JSONDecodeError as e:
+            print(f"[WARN] JSON parse error: {e}")
     # Fallback to markdown headings parsing
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
@@ -40,6 +43,7 @@ def parse_fields(body: str):
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
+    print(f"[DEBUG] Fallback parsed fields: {parsed}")
     # Remap date field if needed
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
@@ -47,14 +51,14 @@ def parse_fields(body: str):
 
 fields = parse_fields(issue.body)
 
+# Debug all fields
+print(f"[DEBUG] fields dict keys: {list(fields.keys())}")
+
 # ─── DETERMINE TEMPLATE
 is_event = bool(fields.get('event_type'))
-if is_event:
-    template_path = f"events/{fields['event_type']}.md.j2"
-    out_subdir = 'events'
-else:
-    template_path = "news.md.j2"
-    out_subdir = 'news'
+template_path = f"events/{fields['event_type']}.md.j2" if is_event else "news.md.j2"
+print(f"[DEBUG] Using template: {template_path}")
+out_subdir = 'events' if is_event else 'news'
 
 # ─── SLUGIFY UTILITY
 def slugify(text: str) -> str:
@@ -65,10 +69,13 @@ def slugify(text: str) -> str:
 
 # ─── IMAGE DOWNLOAD
 def download_image(md_input: str) -> str:
+    print(f"[DEBUG] Raw image markdown input: {md_input}")
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md_input)
     if not m:
+        print("[DEBUG] No image URL found")
         return ""
     url = m.group(1)
+    print(f"[DEBUG] Downloading image URL: {url}")
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
     ext = os.path.splitext(url)[1] or ".png"
@@ -77,10 +84,12 @@ def download_image(md_input: str) -> str:
     path = os.path.join(UPLOADS_DIR, filename)
     with open(path, "wb") as f:
         f.write(resp.content)
+    print(f"[DEBUG] Saved image to: {path}")
     return f"uploads/{filename}"
 
 img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
+print(f"[DEBUG] thumbnail path: {thumbnail}")
 
 # ─── BUILD CONTEXT
 # Combine date and time into ISO datetime for events
@@ -107,6 +116,7 @@ else:
         'description': fields.get('short_description_en', ''),
         'content': fields.get('full_content_en', ''),
     })
+print(f"[DEBUG] Final context for template rendering: {ctx}")
 
 # ─── RENDER & WRITE FILES ──────────────────────────────────────────────────────
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
@@ -114,6 +124,7 @@ tmpl = env.get_template(template_path)
 
 slug_base = slugify(ctx['title'])
 out_dir = os.path.join('content', out_subdir, f"{ctx['date']}-{slug_base}")
+print(f"[DEBUG] Output directory: {out_dir}")
 
 os.makedirs(out_dir, exist_ok=True)
 
@@ -122,6 +133,7 @@ en_out = tmpl.render(**ctx)
 out_path_en = os.path.join(out_dir, 'index.en.md')
 with open(out_path_en, 'w', encoding='utf-8') as f:
     f.write(en_out)
+print(f"[DEBUG] Wrote English markdown: {out_path_en}")
 
 # Render Turkish version (swap language-specific fields)
 if is_event:
@@ -143,7 +155,9 @@ else:
         'description': fields.get('short_description_tr', ''),
         'content': fields.get('full_content_tr', ''),
     }
+print(f"[DEBUG] Turkish context: {tr_ctx}")
 tr_out = tmpl.render(**tr_ctx)
 out_path_tr = os.path.join(out_dir, 'index.tr.md')
 with open(out_path_tr, 'w', encoding='utf-8') as f:
     f.write(tr_out)
+print(f"[DEBUG] Wrote Turkish markdown: {out_path_tr}")
