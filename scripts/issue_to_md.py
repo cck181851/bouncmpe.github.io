@@ -2,6 +2,7 @@
 import os
 import re
 import unicodedata
+import json
 import requests
 from github import Github
 from jinja2 import Environment, FileSystemLoader
@@ -23,6 +24,14 @@ issue = repo.get_issue(number=ISSUE_NUMBER)
 
 # ─── PARSE ISSUE FORM FIELDS ──────────────────────────────────────────────────
 def parse_fields(body: str):
+    # GitHub Issue Forms include a hidden JSON comment with field IDs and values
+    json_match = re.search(r"<!--\s*({.*})\s*-->", body, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+    # Fallback: parse headings
     pattern = re.compile(
         r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
         re.MULTILINE | re.DOTALL
@@ -31,12 +40,15 @@ def parse_fields(body: str):
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
+    # Remap common variations
+    if 'date__yyyy_mm_dd' in parsed:
+        parsed['date'] = parsed.pop('date__yyyy_mm_dd')
     return parsed
 
 fields = parse_fields(issue.body)
 
 # ─── DETERMINE TEMPLATE
-is_event      = fields.get("event_type") is not None
+is_event = 'event_type' in fields and fields['event_type']
 if is_event:
     template_path = f"events/{fields['event_type']}.md.j2"
 else:
@@ -65,40 +77,8 @@ def download_image(md_input: str) -> str:
         f.write(resp.content)
     return f"uploads/{filename}"
 
-# detect image field
-img_field = next((v for k, v in fields.items() if k.startswith("image")), "")
+# detect image field by original ID
+img_field = fields.get('image_markdown', '')
 thumbnail = download_image(img_field) if img_field else ""
 
 # ─── BUILD CONTEXT
-def build_context():
-    base = {
-        "title": fields.get("title_en", issue.title),
-        "date": fields.get("date", ""),
-        "thumbnail": thumbnail
-    }
-    if is_event:
-        base.update({
-            "name": fields.get("name", ""),
-            "duration": fields.get("duration", ""),
-            "location": fields.get("location_en", ""),
-            "description": fields.get("description_en", "")
-        })
-    else:
-        base.update({
-            "description": fields.get("short_description_en", ""),
-            "content": fields.get("full_content_en", "")
-        })
-    return base
-
-# ─── RENDER & WRITE
-env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
-tmpl = env.get_template(template_path)
-ctx = build_context()
-
-slug_base = slugify(ctx["title"])
-out_dir = os.path.join("content", "events" if is_event else "news", f"{ctx['date']}-{slug_base}")
-
-os.makedirs(out_dir, exist_ok=True)
-out_file = os.path.join(out_dir, "index.en.md")
-with open(out_file, "w", encoding="utf-8") as f:
-    f.write(tmpl.render(**ctx))
