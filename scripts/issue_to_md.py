@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
-import unicodedata
+import uuid
 import json
 import mimetypes
 import requests
@@ -92,13 +92,12 @@ def download_image(md: str) -> str:
     ctype = resp.headers.get('Content-Type','').split(';')[0]
     ext   = mimetypes.guess_extension(ctype) or os.path.splitext(url)[1] or '.png'
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    base = os.path.basename(url).split('?')[0]
-    name = unicodedata.uuid4().hex + ext
+    name = uuid.uuid4().hex + ext
     dest = os.path.join(UPLOADS_DIR, name)
     with open(dest, 'wb') as f:
         f.write(resp.content)
     print(f"[DEBUG] Saved image to {dest} (Content-Type: {ctype})")
-    return f"/uploads/{name}"
+    return f"uploads/{name}"  # no leading slash
 
 # Choose which image MD to use
 image_md = download_image(event_image_md if event_type else news_image_md)
@@ -106,7 +105,6 @@ image_md = download_image(event_image_md if event_type else news_image_md)
 # ─── BUILD CONTEXT & SELECT TEMPLATE ──────────────────────────────────────────
 is_event     = bool(event_type)
 datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
-content_type = 'event' if is_event else 'news'
 
 if is_event:
     ctx_en = {
@@ -137,7 +135,7 @@ else:
         'title':      title_en,
         'description': desc_en,
         'date':        date_val,
-        'thumbnail':   image_md.lstrip('/'),
+        'thumbnail':   image_md,
         'content':     content_en,
         'featured':    False,
     }
@@ -146,7 +144,7 @@ else:
         'title':      title_tr or title_en,
         'description': desc_tr,
         'date':        date_val,
-        'thumbnail':   image_md.lstrip('/'),
+        'thumbnail':   image_md,
         'content':     content_tr,
         'featured':    False,
     }
@@ -174,6 +172,4 @@ for lang, ctx, fname in [
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
     print(f"[DEBUG] Wrote {lang} → {path}")
-
-
 
