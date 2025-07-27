@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import os
-import unicodedata
 import re
 import unicodedata
-import uuid
 import json
 import mimetypes
 import requests
@@ -60,35 +58,45 @@ def get_field(variants, default=""):
     return default
 
 # ─── COMMON VARIABLES ─────────────────────────────────────────────────────────
-title_en = get_field(['title_en','event_title__en','news_title__en'], issue.title)
-title_tr = get_field(['title_tr','event_title__tr','news_title__tr'], '')
-date_val  = get_field(['date'], '')
-time_val  = get_field(['time'], '')
+title_en = get_field(
+    ['title_en','event_title__en','news_title__en'], 
+    issue.title
+)
+title_tr = get_field(
+    ['title_tr','event_title__tr','news_title__tr'], 
+    ''
+)
+date_val = get_field(['date'], '')
+time_val = get_field(['time'], '')
 
 # ─── NEWS‑SPECIFIC VARIABLES ───────────────────────────────────────────────────
-desc_en      = get_field(['description_en','short_description_en'], '')
-content_en   = get_field(['content_en','full_content_en'], '')
-desc_tr      = get_field(['description_tr','short_description_tr'], '')
-content_tr   = get_field(['content_tr','full_content_tr'], '')
-news_image_md= get_field(['image_markdown','image__optional__drag___drop'], '')
+desc_en    = get_field(
+    ['description_en','short_description_en','short_description__en'], ''
+)
+content_en = get_field(
+    ['content_en','full_content_en','full_content__en'], ''
+)
+desc_tr    = get_field(
+    ['description_tr','short_description_tr','short_description__tr'], ''
+)
+content_tr = get_field(
+    ['content_tr','full_content_tr','content__tr','full_content__tr'], ''
+)
+news_image_md = get_field(
+    ['image_markdown','image__drag___drop_here','image__optional__drag___drop'], ''
+)
 
 # ─── EVENT‑SPECIFIC VARIABLES ──────────────────────────────────────────────────
-event_type    = get_field(['event_type'], '')
-speaker_name  = get_field(['name','speaker_presenter_name'], '')
-duration      = get_field(['duration'], '')
-location_en   = get_field(['location_en','location__en'], '')
-location_tr   = get_field(['location_tr','location__tr'], '')
-event_image_md= get_field(['image_markdown','image__optional__drag___drop'], '')
-description_e = get_field(['description_en'], '')
-description_t = get_field(['description_tr'], '') ──────────────────────────────────────────────────
-event_type    = get_field(['event_type'], '')
-speaker_name  = get_field(['name','speaker_presenter_name'], '')
-duration      = get_field(['duration'], '')
-location_en   = get_field(['location_en'], '')
-location_tr   = get_field(['location_tr'], '')
-event_image_md= get_field(['image_markdown'], '')
-description_e = get_field(['description_en'], '')
-description_t = get_field(['description_tr'], '')
+event_type   = get_field(['event_type'], '')
+speaker_name = get_field(['name','speaker_presenter_name'], '')
+duration     = get_field(['duration'], '')
+location_en  = get_field(['location_en','location__en'], '')
+location_tr  = get_field(['location_tr','location__tr'], '')
+event_image_md = get_field(
+    ['image_markdown','image__optional__drag___drop'], ''
+)
+description_e = get_field(['description_en','description__en'], '')
+description_t = get_field(['description_tr','description__tr'], '')
 
 # ─── IMAGE DOWNLOAD (shared) ──────────────────────────────────────────────────
 def download_image(md: str) -> str:
@@ -99,18 +107,20 @@ def download_image(md: str) -> str:
     url = m.group(1)
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
+    # Determine extension
     ctype = resp.headers.get('Content-Type','').split(';')[0]
-    ext   = mimetypes.guess_extension(ctype) or os.path.splitext(url)[1] or '.png'
+    ext = mimetypes.guess_extension(ctype) or os.path.splitext(url)[1] or '.png'
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    name = uuid.uuid4().hex + ext
+    base = os.path.basename(url).split('?')[0]
+    name = os.path.splitext(base)[0] + ext
     dest = os.path.join(UPLOADS_DIR, name)
     with open(dest, 'wb') as f:
         f.write(resp.content)
     print(f"[DEBUG] Saved image to {dest} (Content-Type: {ctype})")
-    return f"uploads/{name}"  # no leading slash
+    return f"/uploads/{name}"
 
 # Choose which image MD to use
-image_md = download_image(event_image_md if event_type else news_image_md)
+image_md = download_image(news_image_md) if not event_type else download_image(event_image_md)
 
 # ─── BUILD CONTEXT & SELECT TEMPLATE ──────────────────────────────────────────
 is_event     = bool(event_type)
@@ -118,45 +128,47 @@ datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
 
 if is_event:
     ctx_en = {
-        'type':       event_type,
         'title':      title_en,
-        'name':       speaker_name,
+        'date':       date_val,
+        'time':       time_val,
+        'thumbnail':  image_md,
+        'event_type': event_type,
         'datetime':   datetime_iso,
+        'speaker':    speaker_name,
         'duration':   duration,
         'location':   location_en,
-        'thumbnail':  image_md,
         'description': description_e,
     }
     ctx_tr = {
-        'type':       event_type,
         'title':      title_tr or title_en,
-        'name':       speaker_name,
+        'date':       date_val,
+        'time':       time_val,
+        'thumbnail':  image_md,
+        'event_type': event_type,
         'datetime':   datetime_iso,
+        'speaker':    speaker_name,
         'duration':   duration,
         'location':   location_tr,
-        'thumbnail':  image_md,
         'description': description_t,
     }
     template_path = f"events/{event_type}.md.j2"
     out_subdir    = "events"
 else:
     ctx_en = {
-        'type':       'news',
         'title':      title_en,
+        'date':       date_val,
+        'time':       time_val,
+        'thumbnail':  image_md,
         'description': desc_en,
-        'date':        date_val,
-        'thumbnail':   image_md,
         'content':     content_en,
-        'featured':    False,
     }
     ctx_tr = {
-        'type':       'news',
         'title':      title_tr or title_en,
+        'date':       date_val,
+        'time':       time_val,
+        'thumbnail':  image_md,
         'description': desc_tr,
-        'date':        date_val,
-        'thumbnail':   image_md,
         'content':     content_tr,
-        'featured':    False,
     }
     template_path = "news.md.j2"
     out_subdir    = "news"
@@ -167,6 +179,7 @@ print(f"[DEBUG] Rendering {'Event' if is_event else 'News'} using {template_path
 env  = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
 
+# Slugify the English title
 slug = unicodedata.normalize("NFKD", title_en).encode("ascii","ignore").decode().lower()
 slug = re.sub(r"[^\w\s-]","", slug)
 slug = re.sub(r"[-\s]+","-", slug)
@@ -182,3 +195,6 @@ for lang, ctx, fname in [
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
     print(f"[DEBUG] Wrote {lang} → {path}")
+
+
+
