@@ -1,15 +1,15 @@
 {% extends "_base.md.j2" %}
 
 {% block front_matter %}
-type: {{ type }}
-title: "{{ title }}"
-name: "{{ name }}"
+event_type: "{{ event_type }}"
 datetime: "{{ datetime }}"
+speaker: "{{ speaker }}"
 duration: "{{ duration }}"
 location: "{{ location }}"
-thumbnail: "{{ thumbnail }}"
 {% endblock %}
 
 {% block content %}
+![{{ title }}]({{ thumbnail }})
+
 {{ description }}
 {% endblock %}
