@@ -39,21 +39,16 @@ def parse_fields(body: str):
     if m:
         try:
             data = json.loads(m.group(1))
-            print("[DEBUG] Parsed JSON form data:", data)
             return data
-        except Exception as e:
-            print("[DEBUG] JSON parse error:", e)
-    pattern = re.compile(
-        r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)",
-        re.MULTILINE | re.DOTALL
-    )
+        except:
+            pass
+    pattern = re.compile(r"^#{1,6}\s+(.*?)\s*\r?\n+(.*?)(?=^#{1,6}\s|\Z)", re.MULTILINE | re.DOTALL)
     parsed = {}
     for label, val in pattern.findall(body or ""):
         key = re.sub(r"[^a-z0-9_]", "_", label.lower()).strip("_")
         parsed[key] = val.strip()
     if 'date__yyyy_mm_dd' in parsed:
         parsed['date'] = parsed.pop('date__yyyy_mm_dd')
-    print("[DEBUG] Fallback parsed fields:", parsed)
     return parsed
 
 fields = parse_fields(issue.body)
@@ -64,28 +59,27 @@ def get_field(variants, default=""):
             return fields[name]
     return default
 
-# Common
-common_title = get_field(['title_en','event_title__en','news_title__en'], issue.title)
-common_date  = get_field(['date'], '')
-common_time  = get_field(['time'], '')
+# Common fields
+title_en = get_field(['title_en','event_title__en','news_title__en'], issue.title)
+date_val = get_field(['date'], '')
+time_val = get_field(['time'], '')
 
-# News
+# News-specific
 desc_en    = get_field(['description_en','short_description_en'], '')
 content_en = get_field(['content_en','full_content_en'], '')
 desc_tr    = get_field(['description_tr','short_description_tr'], '')
 content_tr = get_field(['content_tr','full_content_tr'], '')
-news_image = get_field(['image_markdown'], '')
+news_image_md = get_field(['image_markdown'], '')
 
-# Event
+# Event-specific
 event_type   = get_field(['event_type'], '')
 speaker_name = get_field(['name','speaker_presenter_name'], '')
 duration     = get_field(['duration'], '')
 location_en  = get_field(['location_en'], '')
 location_tr  = get_field(['location_tr'], '')
-event_image  = get_field(['image_markdown'], '')
+event_image_md = get_field(['image_markdown'], '')
 
 # Download images
-
 def download_image(md: str) -> str:
     m = re.search(r"!\[[^\]]*\]\((https?://[^\)]+)\)", md)
     if not m:
@@ -94,50 +88,55 @@ def download_image(md: str) -> str:
     resp = requests.get(url, timeout=15)
     resp.raise_for_status()
     ctype = resp.headers.get('Content-Type','').split(';')[0]
-    ext = mimetypes.guess_extension(ctype) or '.png'
+    ext = mimetypes.guess_extension(ctype) or os.path.splitext(url)[1] or '.png'
     os.makedirs(UPLOADS_DIR, exist_ok=True)
-    name = os.path.basename(url).split('?')[0]
+    base = os.path.basename(url).split('?')[0]
+    name = os.path.splitext(base)[0] + ext
     dest = os.path.join(UPLOADS_DIR, name)
     with open(dest, 'wb') as f:
         f.write(resp.content)
-    print(f"[DEBUG] Saved image to {dest}")
     return f"/uploads/{name}"
 
-image_md = download_image(event_image if event_type else news_image)
+image_md = download_image(event_image_md) if event_type else download_image(news_image_md)
 
-# Template mapping
-mapping = {
+# Map templates
+template_map = {
     'news': 'news.md.j2',
-    **{etype: f"events/{etype}.md.j2" for etype in [
-        'phd-thesis-defense','ms-thesis-defense','seminar','special-event'
-    ]}
+    **{etype: f"events/{etype}.md.j2" for etype in ['phd-thesis-defense','ms-thesis-defense','seminar','special-event']}
 }
-key = event_type or 'news'
-template_path = mapping[key]
-print(f"[DEBUG] Using template: {template_path}")
+type_key = event_type or 'news'
+template_path = template_map[type_key]
 
-# Build contexts
-common = {'title': common_title, 'date': common_date, 'time': common_time, 'thumbnail': image_md, 'type': key}
-if key == 'news':
-    en_ctx = {**common, 'description': desc_en, 'content': content_en}
-    tr_ctx = {**common, 'description': desc_tr or desc_en, 'content': content_tr}
+# Build contexts with `type`
+common_ctx = {
+    'type':       type_key,
+    'title':      title_en,
+    'date':       date_val,
+    'time':       time_val,
+    'thumbnail':  image_md,
+}
+if type_key == 'news':
+    en_ctx = {**common_ctx, 'description': desc_en, 'content': content_en}
+    tr_ctx = {**common_ctx, 'description': desc_tr or desc_en, 'content': content_tr}
 else:
-    datetime_iso = f"{common_date}T{common_time}" if common_date and common_time else ''
-    ev_common = {'event_type': key, 'datetime': datetime_iso, 'speaker': speaker_name, 'duration': duration}
-    en_ctx = {**common, **ev_common, 'location': location_en, 'description': get_field(['description_en'], '')}
-    tr_ctx = {**common, **ev_common, 'location': location_tr, 'description': get_field(['description_tr'], '')}
+    datetime_iso = f"{date_val}T{time_val}" if date_val and time_val else ''
+    ev_ctx = {
+        'name':      speaker_name,
+        'datetime':  datetime_iso,
+        'duration':  duration,
+        'location':  location_en,
+    }
+    en_ctx = {**common_ctx, **ev_ctx, 'description': desc_en}
+    tr_ctx = {**common_ctx, **ev_ctx, 'description': desc_tr}
 
-# Render & write
+# Render & write files
 env = Environment(loader=FileSystemLoader(TEMPLATES_DIR), autoescape=False)
 tmpl = env.get_template(template_path)
-slug = unicodedata.normalize("NFKD", common_title).encode("ascii","ignore").decode().lower()
-slug = re.sub(r"[^\w\s-]","", slug)
-slug = re.sub(r"[-\s]+","-", slug)
-out_dir = os.path.join("content", key if key!='news' else 'news', f"{common_date}-{slug}")
+slug = unicodedata.normalize('NFKD', title_en).encode('ascii','ignore').decode().lower()
+slug = re.sub(r"[^\w\s-]", '', slug)
+slug = re.sub(r"[-\s]+", '-', slug)
+out_dir = os.path.join('content', type_key if type_key!='news' else 'news', f"{date_val}-{slug}")
 os.makedirs(out_dir, exist_ok=True)
 for lang, ctx, fname in [('en', en_ctx, 'index.en.md'), ('tr', tr_ctx, 'index.tr.md')]:
-    path = os.path.join(out_dir, fname)
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(os.path.join(out_dir, fname), 'w', encoding='utf-8') as f:
         f.write(tmpl.render(**ctx))
-    print(f"[DEBUG] Wrote {lang}: {path}")
-
