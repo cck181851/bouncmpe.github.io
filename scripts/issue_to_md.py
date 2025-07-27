@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import unicodedata
 import uuid
 import json
 import mimetypes
@@ -172,4 +173,3 @@ for lang, ctx, fname in [
     with open(path, "w", encoding="utf-8") as f:
         f.write(tmpl.render(**ctx))
     print(f"[DEBUG] Wrote {lang} → {path}")
-
