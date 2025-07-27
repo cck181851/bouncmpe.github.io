@@ -1,13 +1,14 @@
 {% extends "_base.md.j2" %}
 
 {% block front_matter %}
+type: news
+title: "{{ title }}"
 description: "{{ description }}"
+{% if featured %}featured: true{% endif %}
+date: "{{ date }}"
+thumbnail: "{{ thumbnail }}"
 {% endblock %}
 
 {% block content %}
-{% if thumbnail %}
-![{{ title }}]({{ thumbnail }})
-{% endif %}
-
 {{ content }}
 {% endblock %}
