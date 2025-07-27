@@ -1,9 +1,6 @@
 ---
 title: "{{ title }}"
-date: "{{ date }}"
-time: "{{ time }}"
-{% if thumbnail %}thumbnail: "{{ thumbnail }}"{% endif %}
+{# child templates supply their own fields (type, date, datetime, etc.) #}
 {% block front_matter %}{% endblock %}
 ---
-
 {% block content %}{% endblock %}
