@@ -70,9 +70,17 @@ desc_en      = get_field(['description_en','short_description_en'], '')
 content_en   = get_field(['content_en','full_content_en'], '')
 desc_tr      = get_field(['description_tr','short_description_tr'], '')
 content_tr   = get_field(['content_tr','full_content_tr'], '')
-news_image_md= get_field(['image_markdown'], '')
+news_image_md= get_field(['image_markdown','image__optional__drag___drop'], '')
 
 # ─── EVENT‑SPECIFIC VARIABLES ──────────────────────────────────────────────────
+event_type    = get_field(['event_type'], '')
+speaker_name  = get_field(['name','speaker_presenter_name'], '')
+duration      = get_field(['duration'], '')
+location_en   = get_field(['location_en','location__en'], '')
+location_tr   = get_field(['location_tr','location__tr'], '')
+event_image_md= get_field(['image_markdown','image__optional__drag___drop'], '')
+description_e = get_field(['description_en'], '')
+description_t = get_field(['description_tr'], '') ──────────────────────────────────────────────────
 event_type    = get_field(['event_type'], '')
 speaker_name  = get_field(['name','speaker_presenter_name'], '')
 duration      = get_field(['duration'], '')
