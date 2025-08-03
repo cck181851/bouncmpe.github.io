@@ -1,0 +1,7 @@
+
+type: phd-thesis-defense
+title: Test Event Title in Turkish
+name: 
+datetime: 2025-12-12T11:30:00
+duration: 1.5h
+location: ABD
