@@ -4,6 +4,10 @@ on:
   issues:
     types: [opened, edited, closed, deleted]
 
+defaults:
+  run:
+    working-directory: .github
+
 jobs:
   # ───────────── Sync on Opened/Edited ─────────────────
   sync:
